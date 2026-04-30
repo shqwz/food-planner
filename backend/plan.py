@@ -4,6 +4,7 @@ from deepseek import generate_weekly_plan, analyze_meal_description, adjust_rema
 from datetime import datetime, timedelta
 import json
 from services import resolve_user_id, find_product_id, NotFoundError
+from planner_engine import build_planning_context
 
 plan_bp = Blueprint("plan", __name__)
 
@@ -19,6 +20,7 @@ def generate_plan():
     """
     data = request.get_json()
     user_id = data.get("user_id")
+    planner_payload = data.get("planner", {})
 
     if not user_id:
         return jsonify({"error": "user_id обязателен"}), 400
@@ -57,6 +59,13 @@ def generate_plan():
     product_list = [dict(p) for p in products]
     conn.close()
 
+    algorithm_context = build_planning_context(
+        user=dict(user),
+        training_days=training_days,
+        pantry_items=product_list,
+        planner_payload=planner_payload,
+    )
+
     # Собираем данные для нейросети
     user_data = {
         "training_days": training_days,
@@ -67,7 +76,8 @@ def generate_plan():
         "preferences": preferences,
         "age": user["age"] or 25,
         "weight": user["weight"] or 75,
-        "height": user["height"] or 175
+        "height": user["height"] or 175,
+        "algorithm_context": algorithm_context,
     }
 
     try:
@@ -80,8 +90,19 @@ def generate_plan():
     conn = get_db()
     tomorrow = (datetime.now() + timedelta(days=1)).date()
 
-    for i, (date_str, day_data) in enumerate(week_plan.get("week_plan", {}).items()):
-        plan_date = date_str
+    explanations_by_date = {x["date"]: x["why"] for x in algorithm_context.get("explanations", [])}
+    targets_by_date = {x["date"]: x for x in algorithm_context.get("daily_targets", [])}
+
+    for i, (_, day_data) in enumerate(week_plan.get("week_plan", {}).items()):
+        # Do not trust model-provided calendar dates (it may return stale years).
+        # We always map generated days to the next 7-day window from tomorrow.
+        plan_date = (tomorrow + timedelta(days=i)).strftime("%Y-%m-%d")
+        target_day = targets_by_date.get(plan_date, {})
+        deterministic_day_type = "training" if target_day.get("is_training") else "rest"
+
+        meals = day_data.get("meals", [])
+        for meal in meals:
+            meal["decision_why"] = explanations_by_date.get(plan_date, "")
 
         conn.execute('''
             INSERT OR REPLACE INTO meal_plan 
@@ -90,8 +111,8 @@ def generate_plan():
         ''', (
             user["id"],
             plan_date,
-            day_data.get("day_type", "rest"),
-            json.dumps(day_data.get("meals", []), ensure_ascii=False),
+            deterministic_day_type,
+            json.dumps(meals, ensure_ascii=False),
             day_data.get("daily_totals", {}).get("kcal", 0),
             day_data.get("daily_totals", {}).get("protein", 0),
             day_data.get("daily_totals", {}).get("fat", 0),
@@ -100,7 +121,7 @@ def generate_plan():
         ))
 
         # Резервируем продукты
-        for meal in day_data.get("meals", []):
+        for meal in meals:
             for ing in meal.get("ingredients", []):
                 # Ищем продукт в справочнике
                 product_id = find_product_id(conn, ing["name"])
@@ -116,7 +137,13 @@ def generate_plan():
     return jsonify({
         "status": "ok",
         "message": "План на неделю сгенерирован и сохранён",
-        "week_plan": week_plan["week_plan"]
+        "week_plan": week_plan["week_plan"],
+        "explanations": algorithm_context.get("explanations", []),
+        "strategy": {
+            "budget_weekly_limit": algorithm_context.get("budget_weekly_limit"),
+            "estimated_pantry_coverage_cost": algorithm_context.get("estimated_pantry_coverage_cost"),
+            "automation_mode": algorithm_context.get("automation_mode"),
+        }
     })
 
 

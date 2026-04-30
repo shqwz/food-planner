@@ -1,4 +1,4 @@
-import { useEffect, useState } from "react";
+import { useCallback, useEffect, useState } from "react";
 import { apiGet, apiPost } from "../api/client";
 
 export default function PlanTab({ showToast, userId }) {
@@ -6,13 +6,24 @@ export default function PlanTab({ showToast, userId }) {
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState("");
 
+  const resolvePlan = useCallback(async () => {
+    const todayResult = await apiGet("/api/plan", { user_id: userId });
+    if (todayResult.exists) return todayResult;
+
+    const tomorrow = new Date();
+    tomorrow.setDate(tomorrow.getDate() + 1);
+    const tomorrowStr = tomorrow.toISOString().slice(0, 10);
+    const tomorrowResult = await apiGet("/api/plan", { user_id: userId, date: tomorrowStr });
+    return tomorrowResult.exists ? tomorrowResult : null;
+  }, [userId]);
+
   useEffect(() => {
     const loadPlan = async () => {
       try {
         setLoading(true);
         setError("");
-        const result = await apiGet("/api/plan", { user_id: userId });
-        setPlan(result.exists ? result : null);
+        const result = await resolvePlan();
+        setPlan(result);
       } catch (e) {
         setError(e.message);
       } finally {
@@ -20,14 +31,21 @@ export default function PlanTab({ showToast, userId }) {
       }
     };
     loadPlan();
-  }, [userId]);
+  }, [resolvePlan]);
 
   const generate = async () => {
     try {
-      await apiPost("/api/plan/generate", { user_id: userId });
+      await apiPost("/api/plan/generate", {
+        user_id: userId,
+        planner: {
+          meals_count: "auto",
+          sleep_quality: "normal",
+          overeating_event: null,
+        },
+      });
       showToast("✅", "План сгенерирован");
-      const result = await apiGet("/api/plan", { user_id: userId });
-      setPlan(result.exists ? result : null);
+      const result = await resolvePlan();
+      setPlan(result);
     } catch (e) {
       showToast("⚠️", e.message);
     }

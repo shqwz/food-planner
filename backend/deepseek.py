@@ -211,6 +211,9 @@ def generate_weekly_plan(user_data: dict, products: list) -> dict:
     budget_context = build_budget_context(user_data.get("budget_weekly", 2000), products_with_prices)
     products_context = build_products_context(products)
     preferences = user_data.get("preferences", "нет особых предпочтений")
+    algorithm_context = user_data.get("algorithm_context", {})
+    targets_json = json.dumps(algorithm_context.get("daily_targets", []), ensure_ascii=False)
+    extra_rules = json.dumps(algorithm_context, ensure_ascii=False)
 
     prompt = f"""
 Составь план питания на 7 дней (начиная с завтрашнего дня).
@@ -228,6 +231,12 @@ def generate_weekly_plan(user_data: dict, products: list) -> dict:
 - Дни тренировок: {training_kcal:.0f} ккал, белки {protein:.0f}г, жиры {fat:.0f}г, углеводы {training_carbs:.0f}г
 - Дни отдыха: {rest_kcal:.0f} ккал, белки {protein:.0f}г, жиры {fat:.0f}г, углеводы {rest_carbs:.0f}г
 
+АЛГОРИТМИЧЕСКИЕ ТАРГЕТЫ ПО ДНЯМ (приоритет над общими):
+{targets_json}
+
+СЛУЖЕБНЫЙ КОНТЕКСТ ОПТИМИЗАЦИИ:
+{extra_rules}
+
 {budget_context}
 
 {products_context}
@@ -241,6 +250,7 @@ def generate_weekly_plan(user_data: dict, products: list) -> dict:
 6. Блюда простые, без сложной готовки.
 7. Продукты с истекающим сроком — в первую очередь.
 8. Не превышай бюджет.
+9. Строго придерживайся переданных daily_targets по дням.
 
 Верни строго JSON:
 {{
