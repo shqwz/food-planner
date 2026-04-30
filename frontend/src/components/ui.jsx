@@ -53,7 +53,6 @@ export function ProgressRing({ value, max, size = 60, stroke = 7, color = "var(-
   const circ = 2 * Math.PI * r;
   const pct = Math.min(1, value / max);
   const offset = circ * (1 - pct);
-  const id = `grad-${color.replace(/[^a-z0-9]/gi, "")}`;
   return (
     <div className="flex flex-col items-center gap-1.5">
       <div className="relative flex items-center justify-center">

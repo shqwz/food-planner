@@ -1,0 +1,33 @@
+services:
+  backend:
+    build:
+      context: .
+      dockerfile: backend/Dockerfile
+    container_name: food-planner-backend
+    environment:
+      OPENROUTER_API_KEY: ${OPENROUTER_API_KEY:-}
+      TELEGRAM_BOT_TOKEN: ${TELEGRAM_BOT_TOKEN:-}
+      FLASK_DEBUG: ${FLASK_DEBUG:-1}
+      RUN_SCHEDULER_IN_WEB: ${RUN_SCHEDULER_IN_WEB:-0}
+      FOOD_PLANNER_DB_PATH: /data/food_planner.db
+    ports:
+      - "5001:5000"
+    volumes:
+      - food_planner_data:/data
+    restart: unless-stopped
+
+  frontend:
+    build:
+      context: .
+      dockerfile: frontend/Dockerfile
+    container_name: food-planner-frontend
+    environment:
+      VITE_API_PROXY_TARGET: http://backend:5000
+    ports:
+      - "5173:5173"
+    depends_on:
+      - backend
+    restart: unless-stopped
+
+volumes:
+  food_planner_data:

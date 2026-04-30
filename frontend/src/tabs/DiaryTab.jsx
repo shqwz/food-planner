@@ -1,23 +1,26 @@
+import { useEffect, useMemo, useState } from "react";
 import { BigCaloriesRing, ProgressRing, SectionTitle, PillButton } from "../components/ui";
+import { apiGet } from "../api/client";
 
-const GOAL = { kcal: 2180, protein: 142, fat: 68, carbs: 240 };
-const EATEN = { kcal: 1640, protein: 108, fat: 47, carbs: 180 };
+const GOAL = { kcal: 2200, protein: 140, fat: 70, carbs: 230 };
 
-const DIARY_ENTRIES = [
-  { time: "08:15", name: "Завтрак",  items: "Овсянка, яйца варёные, кофе с молоком", kcal: 520, color: "#ffb347", emoji: "🌅" },
-  { time: "13:10", name: "Обед",     items: "Куриная грудка, рис бурый, овощной салат",  kcal: 640, color: "#6c63ff", emoji: "☀️" },
-  { time: "16:45", name: "Перекус",  items: "Творог 5% с ягодами, миндаль",          kcal: 350, color: "#00d9a3", emoji: "🍎" },
-  { time: "19:30", name: "Ужин (план)", items: "Лосось, гречка, брокколи на пару",   kcal: 430, color: "#ff6584", emoji: "🌙", planned: true },
-];
+export default function DiaryTab({ showToast, userId }) {
+  const [diary, setDiary] = useState({ meals: [], totals: { kcal: 0, protein: 0, fat: 0, carbs: 0 } });
 
-const REMAINING = {
-  kcal:    GOAL.kcal    - EATEN.kcal,
-  protein: GOAL.protein - EATEN.protein,
-  fat:     GOAL.fat     - EATEN.fat,
-  carbs:   GOAL.carbs   - EATEN.carbs,
-};
+  useEffect(() => {
+    apiGet("/api/diary", { user_id: userId })
+      .then(setDiary)
+      .catch(() => {});
+  }, [userId]);
 
-export default function DiaryTab({ showToast }) {
+  const eaten = useMemo(() => diary.totals || { kcal: 0, protein: 0, fat: 0, carbs: 0 }, [diary]);
+  const remaining = useMemo(() => ({
+    kcal: GOAL.kcal - eaten.kcal,
+    protein: GOAL.protein - eaten.protein,
+    fat: GOAL.fat - eaten.fat,
+    carbs: GOAL.carbs - eaten.carbs,
+  }), [eaten]);
+
   return (
     <div className="animate-fade-up">
       {/* КБЖУ hero */}
@@ -29,12 +32,12 @@ export default function DiaryTab({ showToast }) {
         }}
       >
         <div className="flex items-center gap-6">
-          <BigCaloriesRing eaten={EATEN.kcal} goal={GOAL.kcal} />
+          <BigCaloriesRing eaten={eaten.kcal} goal={GOAL.kcal} />
 
           <div className="flex flex-col gap-3.5">
-            <ProgressRing value={EATEN.protein} max={GOAL.protein} size={58} stroke={6} color="#ff6584" label="Белки" sub={`${EATEN.protein}г`} />
-            <ProgressRing value={EATEN.fat}     max={GOAL.fat}     size={58} stroke={6} color="#ffb347" label="Жиры"  sub={`${EATEN.fat}г`} />
-            <ProgressRing value={EATEN.carbs}   max={GOAL.carbs}   size={58} stroke={6} color="#6c63ff" label="Углев." sub={`${EATEN.carbs}г`} />
+            <ProgressRing value={eaten.protein} max={GOAL.protein} size={58} stroke={6} color="#ff6584" label="Белки" sub={`${Math.round(eaten.protein)}г`} />
+            <ProgressRing value={eaten.fat}     max={GOAL.fat}     size={58} stroke={6} color="#ffb347" label="Жиры"  sub={`${Math.round(eaten.fat)}г`} />
+            <ProgressRing value={eaten.carbs}   max={GOAL.carbs}   size={58} stroke={6} color="#6c63ff" label="Углев." sub={`${Math.round(eaten.carbs)}г`} />
           </div>
         </div>
 
@@ -44,10 +47,10 @@ export default function DiaryTab({ showToast }) {
           style={{ borderTop: "1px solid var(--tg-border)" }}
         >
           {[
-            { label: "До цели", value: `${REMAINING.kcal} кк`, color: "#00d9a3" },
-            { label: "Белки",   value: `${REMAINING.protein}г`, color: "#ff6584" },
-            { label: "Жиры",    value: `${REMAINING.fat}г`,     color: "#ffb347" },
-            { label: "Углев.",  value: `${REMAINING.carbs}г`,   color: "#6c63ff" },
+            { label: "До цели", value: `${Math.round(remaining.kcal)} кк`, color: "#00d9a3" },
+            { label: "Белки",   value: `${Math.round(remaining.protein)}г`, color: "#ff6584" },
+            { label: "Жиры",    value: `${Math.round(remaining.fat)}г`,     color: "#ffb347" },
+            { label: "Углев.",  value: `${Math.round(remaining.carbs)}г`,   color: "#6c63ff" },
           ].map((s) => (
             <div key={s.label}>
               <div className="text-[13px] font-extrabold" style={{ color: s.color }}>{s.value}</div>
@@ -60,7 +63,7 @@ export default function DiaryTab({ showToast }) {
       <SectionTitle>Хронология</SectionTitle>
 
       {/* Timeline */}
-      {DIARY_ENTRIES.map((entry, i) => (
+      {diary.meals.map((entry, i) => (
         <div key={i} className="flex gap-3 mb-2">
           {/* Time column */}
           <div className="flex flex-col items-center w-10 flex-shrink-0">
@@ -69,7 +72,7 @@ export default function DiaryTab({ showToast }) {
               className="w-2.5 h-2.5 rounded-full mt-1 flex-shrink-0"
               style={{ background: entry.color }}
             />
-            {i < DIARY_ENTRIES.length - 1 && (
+            {i < diary.meals.length - 1 && (
               <div className="flex-1 w-[2px] rounded-full my-1" style={{ background: "var(--tg-border)", minHeight: 16 }} />
             )}
           </div>
@@ -78,19 +81,18 @@ export default function DiaryTab({ showToast }) {
           <div
             className="flex-1 rounded-xl px-3.5 py-3 mb-1"
             style={{
-              background: entry.planned ? "transparent" : "var(--tg-surface)",
-              border: entry.planned ? `1px dashed ${entry.color}50` : "1px solid var(--tg-border)",
-              opacity: entry.planned ? 0.7 : 1,
+              background: entry.was_planned ? "transparent" : "var(--tg-surface)",
+              border: entry.was_planned ? "1px dashed #6c63ff50" : "1px solid var(--tg-border)",
+              opacity: entry.was_planned ? 0.7 : 1,
             }}
           >
             <div className="flex items-center justify-between mb-1">
               <div className="text-[14px] font-bold flex items-center gap-1.5" style={{ color: "var(--tg-text)" }}>
-                <span>{entry.emoji}</span>
-                {entry.name}
+                {entry.meal_type}
               </div>
-              <div className="text-[14px] font-extrabold" style={{ color: entry.color }}>{entry.kcal} кк</div>
+              <div className="text-[14px] font-extrabold" style={{ color: "#6c63ff" }}>{Math.round(entry.totals.kcal || 0)} кк</div>
             </div>
-            <div className="text-[12px] leading-snug" style={{ color: "var(--tg-muted)" }}>{entry.items}</div>
+            <div className="text-[12px] leading-snug" style={{ color: "var(--tg-muted)" }}>{entry.dish_name}</div>
           </div>
         </div>
       ))}

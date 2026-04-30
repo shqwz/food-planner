@@ -1,10 +1,9 @@
 import requests
 import json
-import os
 import time
 import re
+from config import OPENROUTER_API_KEY
 
-OPENROUTER_API_KEY = os.environ.get("OPENROUTER_API_KEY", "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")
 OPENROUTER_URL = "https://openrouter.ai/api/v1/chat/completions"
 
 # Бесплатные модели на OpenRouter (выбираем Gemini 2.0 Flash)
@@ -12,6 +11,9 @@ MODEL = "google/gemini-2.0-flash-001"  # бесплатная, 200 запрос�
 
 
 def call_ai(prompt: str, system_prompt: str = None, temperature: float = 0.7) -> dict:
+    if not OPENROUTER_API_KEY:
+        raise Exception("OPENROUTER_API_KEY не задан в окружении")
+
     """
     Отправляет запрос к OpenRouter и возвращает ответ как dict.
     С повторными попытками при ошибках.

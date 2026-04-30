@@ -1,19 +1,16 @@
-import { useState } from "react";
+import { useEffect, useState } from "react";
 import { GlassCard, SectionTitle, PillButton } from "../components/ui";
+import { apiGet } from "../api/client";
 
-const INITIAL_ITEMS = [
-  { name: "Куриная грудка", amount: "1 кг",    price: 320, emoji: "🍗", checked: false },
-  { name: "Лосось с/м",     amount: "500 г",   price: 480, emoji: "🐟", checked: false },
-  { name: "Яйца С1",        amount: "30 шт",   price: 195, emoji: "🥚", checked: true  },
-  { name: "Творог 5%",      amount: "2×500 г", price: 220, emoji: "🧀", checked: false },
-  { name: "Авокадо",        amount: "4 шт",    price: 280, emoji: "🥑", checked: false },
-  { name: "Брокколи зам.",  amount: "900 г",   price: 195, emoji: "🥦", checked: true  },
-  { name: "Миндаль",        amount: "200 г",   price: 240, emoji: "🌰", checked: false },
-  { name: "Рис бурый",      amount: "1 кг",    price: 180, emoji: "🌾", checked: false },
-];
+export default function ShoppingTab({ showToast, userId }) {
+  const [items, setItems] = useState([]);
 
-export default function ShoppingTab({ showToast }) {
-  const [items, setItems] = useState(INITIAL_ITEMS);
+  useEffect(() => {
+    apiGet("/api/shopping", { user_id: userId, days: 3 })
+      .then((data) => setItems((data.items || []).map((item) => ({ ...item, checked: false })))
+      )
+      .catch(() => {});
+  }, [userId]);
 
   const toggle = (i) => {
     setItems((prev) => prev.map((item, idx) => idx === i ? { ...item, checked: !item.checked } : item));
@@ -21,7 +18,7 @@ export default function ShoppingTab({ showToast }) {
 
   const remaining  = items.filter((i) => !i.checked);
   const bought     = items.filter((i) =>  i.checked);
-  const totalPrice = items.reduce((sum, i) => sum + (i.checked ? 0 : i.price), 0);
+  const totalPrice = items.reduce((sum, i) => sum + (i.checked ? 0 : i.estimated_cost), 0);
   const allDone    = remaining.length === 0;
 
   return (
@@ -99,7 +96,7 @@ function ShopItem({ item, onToggle }) {
         {item.checked && <span className="text-[13px] font-bold text-white">✓</span>}
       </div>
 
-      <span className="text-[20px]">{item.emoji}</span>
+      <span className="text-[20px]">🛒</span>
 
       <div className="flex-1">
         <div
@@ -111,11 +108,13 @@ function ShopItem({ item, onToggle }) {
         >
           {item.name}
         </div>
-        <div className="text-[12px] mt-0.5" style={{ color: "var(--tg-muted)" }}>{item.amount}</div>
+        <div className="text-[12px] mt-0.5" style={{ color: "var(--tg-muted)" }}>
+          {item.amount_needed} {item.unit}
+        </div>
       </div>
 
       <div className="text-[13px] font-bold flex-shrink-0" style={{ color: "var(--tg-muted)" }}>
-        {item.price} ₽
+        {Math.round(item.estimated_cost)} ₽
       </div>
     </div>
   );

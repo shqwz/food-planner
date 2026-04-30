@@ -1,16 +1,18 @@
 import requests
-import os
 import time
 from threading import Thread
 from datetime import datetime
 from database import get_db
+from config import TELEGRAM_BOT_TOKEN
 
-TOKEN = "8705814043:AAHxWO0wxuFvg4Tvilj2-LvKjwwh84pZE-c"
+TOKEN = TELEGRAM_BOT_TOKEN
 BASE_URL = f"https://api.telegram.org/bot{TOKEN}"
 
 
 def send_message(chat_id: int, text: str):
     """Отправляет сообщение пользователю"""
+    if not TOKEN:
+        return
     try:
         requests.post(
             f"{BASE_URL}/sendMessage",

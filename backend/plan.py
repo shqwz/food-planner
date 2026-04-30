@@ -3,8 +3,7 @@ from database import get_db
 from deepseek import generate_weekly_plan, analyze_meal_description, adjust_remaining_meals
 from datetime import datetime, timedelta
 import json
-
-plan_bp = Blueprint("plan", __name__)
+from services import resolve_user_id, find_product_id, NotFoundError
 
 plan_bp = Blueprint("plan", __name__)
 
@@ -26,21 +25,23 @@ def generate_plan():
 
     conn = get_db()
 
-    # Получаем данные пользователя
-    user = conn.execute("SELECT * FROM users WHERE telegram_id = ?", (user_id,)).fetchone()
-    if not user:
-        return jsonify({"error": "Пользователь не найден"}), 404
+    try:
+        internal_user_id = resolve_user_id(conn, user_id)
+    except NotFoundError as e:
+        conn.close()
+        return jsonify({"error": str(e)}), 404
+    user = conn.execute("SELECT * FROM users WHERE id = ?", (internal_user_id,)).fetchone()
 
     # Получаем тренировочные дни
     training_rows = conn.execute(
-        "SELECT day_of_week FROM training_days WHERE user_id = ?", (user["id"],)
+        "SELECT day_of_week FROM training_days WHERE user_id = ?", (internal_user_id,)
     ).fetchall()
     training_days = [r["day_of_week"] for r in training_rows]
 
     # Получаем предпочтения
     pref_rows = conn.execute(
         "SELECT product_name, preference_type FROM food_preferences WHERE user_id = ?",
-        (user["id"],)
+        (internal_user_id,)
     ).fetchall()
     preferences = ", ".join([f"{'Исключить' if r['preference_type'] == 'exclude' else 'Предпочитать'}: {r['product_name']}" for r in pref_rows]) or "нет особых предпочтений"
 
@@ -51,7 +52,7 @@ def generate_plan():
         FROM pantry p
         JOIN products_ref pr ON p.product_id = pr.id
         WHERE p.user_id = ?
-    ''', (user["id"],)).fetchall()
+    ''', (internal_user_id,)).fetchall()
 
     product_list = [dict(p) for p in products]
     conn.close()
@@ -102,16 +103,12 @@ def generate_plan():
         for meal in day_data.get("meals", []):
             for ing in meal.get("ingredients", []):
                 # Ищем продукт в справочнике
-                product = conn.execute(
-                    "SELECT id FROM products_ref WHERE LOWER(name) = ?",
-                    (ing["name"].lower(),)
-                ).fetchone()
-
-                if product:
+                product_id = find_product_id(conn, ing["name"])
+                if product_id:
                     conn.execute('''
                         INSERT INTO reservations (user_id, product_id, plan_date, meal_type, amount_reserved)
                         VALUES (?, ?, ?, ?, ?)
-                    ''', (user["id"], product["id"], plan_date, meal["type"], ing["amount"]))
+                    ''', (internal_user_id, product_id, plan_date, meal["type"], ing["amount"]))
 
     conn.commit()
     conn.close()
@@ -136,13 +133,15 @@ def get_plan():
         return jsonify({"error": "user_id обязателен"}), 400
 
     conn = get_db()
-    user = conn.execute("SELECT id FROM users WHERE telegram_id = ?", (user_id,)).fetchone()
-    if not user:
-        return jsonify({"error": "Пользователь не найден"}), 404
+    try:
+        internal_user_id = resolve_user_id(conn, user_id)
+    except NotFoundError as e:
+        conn.close()
+        return jsonify({"error": str(e)}), 404
 
     plan = conn.execute('''
         SELECT * FROM meal_plan WHERE user_id = ? AND plan_date = ?
-    ''', (user["id"], date)).fetchone()
+    ''', (internal_user_id, date)).fetchone()
     conn.close()
 
     if not plan:

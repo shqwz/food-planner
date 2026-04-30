@@ -1,7 +1,7 @@
 import sqlite3
 import os
+from config import DB_PATH
 
-DB_PATH = os.path.join(os.path.dirname(__file__), "food_planner.db")
 
 def get_db():
     """Возвращает соединение с БД"""
@@ -60,6 +60,21 @@ def seed_products():
     conn.close()
     print("✅ Базовые продукты добавлены в справочник")
 
+
+def seed_default_user():
+    """Создаёт демо-пользователя для web-клиента в dev-режиме."""
+    conn = get_db()
+    conn.execute(
+        """
+        INSERT OR IGNORE INTO users (telegram_id, name, goal, budget_weekly, age, weight, height)
+        VALUES (?, ?, ?, ?, ?, ?, ?)
+        """,
+        (123456789, "Алексей", "recomposition", 2500, 30, 75, 178),
+    )
+    conn.commit()
+    conn.close()
+
 if __name__ == "__main__":
     init_db()
     seed_products()
+    seed_default_user()

@@ -1,9 +1,11 @@
 from flask import Flask, request, jsonify, send_from_directory
-from database import get_db, init_db, seed_products
+from database import get_db, init_db, seed_products, seed_default_user
 from plan import plan_bp
 from diary import diary_bp
 from shopping import shopping_bp
+from services import resolve_user_id, find_or_create_product, NotFoundError
 import os
+from config import FLASK_DEBUG, TELEGRAM_BOT_TOKEN, DB_PATH
 
 app = Flask(__name__, static_folder="../frontend/dist", static_url_path="")
 
@@ -33,6 +35,7 @@ def initialize():
     """Инициализирует БД и заполняет справочник продуктов"""
     init_db()
     seed_products()
+    seed_default_user()
     return jsonify({"status": "ok", "message": "База данных инициализирована"})
 
 
@@ -47,6 +50,12 @@ def get_pantry():
         return jsonify({"error": "user_id обязателен"}), 400
 
     conn = get_db()
+    try:
+        internal_user_id = resolve_user_id(conn, user_id)
+    except NotFoundError as e:
+        conn.close()
+        return jsonify({"error": str(e)}), 404
+
     rows = conn.execute('''
         SELECT p.id, pr.name, p.amount, pr.unit, pr.calories_per_100,
                pr.protein_per_100, pr.fat_per_100, pr.carbs_per_100,
@@ -55,7 +64,7 @@ def get_pantry():
         JOIN products_ref pr ON p.product_id = pr.id
         WHERE p.user_id = ?
         ORDER BY p.expiry_date IS NULL, p.expiry_date ASC
-    ''', (user_id,)).fetchall()
+    ''', (internal_user_id,)).fetchall()
     conn.close()
 
     products = []
@@ -90,27 +99,19 @@ def add_to_pantry():
         return jsonify({"error": "user_id, name, amount обязательны"}), 400
 
     conn = get_db()
+    try:
+        internal_user_id = resolve_user_id(conn, user_id)
+    except NotFoundError as e:
+        conn.close()
+        return jsonify({"error": str(e)}), 404
 
-    # Ищем продукт в справочнике (или создаём новый)
-    product = conn.execute(
-        "SELECT id FROM products_ref WHERE LOWER(name) = ?", (product_name,)
-    ).fetchone()
-
-    if not product:
-        # Создаём новый продукт с дефолтными значениями
-        cursor = conn.execute(
-            "INSERT INTO products_ref (name, unit, is_custom) VALUES (?, 'г', 1)",
-            (data.get("name", "").strip(),)
-        )
-        product_id = cursor.lastrowid
-    else:
-        product_id = product["id"]
+    product_id = find_or_create_product(conn, data.get("name", ""))
 
     # Добавляем на склад
     conn.execute('''
         INSERT INTO pantry (user_id, product_id, amount, price_per_unit, expiry_date)
         VALUES (?, ?, ?, ?, ?)
-    ''', (user_id, product_id, amount, price, expiry))
+    ''', (internal_user_id, product_id, amount, price, expiry))
 
     conn.commit()
     new_id = conn.execute("SELECT last_insert_rowid()").fetchone()[0]
@@ -126,6 +127,12 @@ def update_pantry(pantry_id):
     user_id = data.get("user_id")
 
     conn = get_db()
+    try:
+        internal_user_id = resolve_user_id(conn, user_id)
+    except NotFoundError as e:
+        conn.close()
+        return jsonify({"error": str(e)}), 404
+
     conn.execute('''
         UPDATE pantry
         SET amount = COALESCE(?, amount),
@@ -137,7 +144,7 @@ def update_pantry(pantry_id):
         data.get("price_per_unit"),
         data.get("expiry_date"),
         pantry_id,
-        user_id
+        internal_user_id
     ))
     conn.commit()
     conn.close()
@@ -149,7 +156,13 @@ def delete_from_pantry(pantry_id):
     """Удалить продукт со склада"""
     user_id = request.args.get("user_id")
     conn = get_db()
-    conn.execute("DELETE FROM pantry WHERE id = ? AND user_id = ?", (pantry_id, user_id))
+    try:
+        internal_user_id = resolve_user_id(conn, user_id)
+    except NotFoundError as e:
+        conn.close()
+        return jsonify({"error": str(e)}), 404
+
+    conn.execute("DELETE FROM pantry WHERE id = ? AND user_id = ?", (pantry_id, internal_user_id))
     conn.commit()
     conn.close()
     return jsonify({"status": "ok"})
@@ -198,14 +211,15 @@ def serve_static(path):
 # ЗАПУСК
 # ============================================================
 # Запуск планировщика уведомлений (только если есть токен)
-if os.environ.get("TELEGRAM_BOT_TOKEN"):
+if TELEGRAM_BOT_TOKEN and os.environ.get("RUN_SCHEDULER_IN_WEB", "0") == "1":
     from bot import start_scheduler
     start_scheduler()
 
 
 if __name__ == "__main__":
     # Инициализация при первом запуске
-    if not os.path.exists(os.path.join(os.path.dirname(__file__), "food_planner.db")):
+    if not os.path.exists(DB_PATH):
         init_db()
         seed_products()
-    app.run(debug=True, port=5000)
+        seed_default_user()
+    app.run(debug=FLASK_DEBUG, host="0.0.0.0", port=5000)

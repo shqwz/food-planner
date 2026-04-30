@@ -1,1 +1,30 @@
-!frontend/dist
+# --- Secrets / local env ---
+.env
+.env.*
+!.env.example
+backend/.env
+
+# --- Python ---
+__pycache__/
+**/__pycache__/
+*.py[cod]
+*.pyo
+*.pyd
+.pytest_cache/
+
+# --- Local databases ---
+backend/food_planner.db
+*.db
+
+# --- Node / frontend ---
+node_modules/
+frontend/node_modules/
+frontend/dist/
+
+# --- IDE / OS ---
+.DS_Store
+.idea/
+.vscode/
+
+# --- Local accidental nested repo copy ---
+food-planner/

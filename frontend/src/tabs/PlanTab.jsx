@@ -1,49 +1,48 @@
+import { useEffect, useState } from "react";
 import { GlassCard, SectionTitle, MacroChip, PillButton } from "../components/ui";
+import { apiGet, apiPost } from "../api/client";
 
-const DAILY = { kcal: 2180, protein: 142, fat: 68, carbs: 240 };
+export default function PlanTab({ showToast, userId }) {
+  const [plan, setPlan] = useState(null);
+  const [loading, setLoading] = useState(true);
+  const [error, setError] = useState("");
 
-const MEALS = [
-  {
-    id: 1, name: "Завтрак", time: "08:00", emoji: "🌅", color: "#ffb347",
-    items: [
-      { name: "Овсянка с бананом",   emoji: "🥣", kcal: 320 },
-      { name: "Яйца варёные (2 шт)", emoji: "🥚", kcal: 155 },
-      { name: "Кофе с молоком",      emoji: "☕", kcal:  45 },
-    ],
-    total_kcal: 520, protein: 28, fat: 14, carbs: 68,
-  },
-  {
-    id: 2, name: "Обед", time: "13:00", emoji: "☀️", color: "#6c63ff",
-    items: [
-      { name: "Куриная грудка 150г", emoji: "🍗", kcal: 165 },
-      { name: "Рис бурый 150г",      emoji: "🍚", kcal: 195 },
-      { name: "Салат из овощей",     emoji: "🥗", kcal:  80 },
-    ],
-    total_kcal: 640, protein: 45, fat: 12, carbs: 82,
-  },
-  {
-    id: 3, name: "Перекус", time: "16:30", emoji: "🍎", color: "#00d9a3",
-    items: [
-      { name: "Творог с ягодами", emoji: "🫐", kcal: 180 },
-      { name: "Миндаль 30г",      emoji: "🌰", kcal: 170 },
-    ],
-    total_kcal: 350, protein: 20, fat: 16, carbs: 24,
-  },
-  {
-    id: 4, name: "Ужин", time: "19:30", emoji: "🌙", color: "#ff6584",
-    items: [
-      { name: "Лосось 200г",      emoji: "🐟", kcal: 280 },
-      { name: "Гречка 100г",      emoji: "🫘", kcal: 110 },
-      { name: "Брокколи на пару", emoji: "🥦", kcal:  40 },
-    ],
-    total_kcal: 430, protein: 38, fat: 18, carbs: 28,
-  },
-];
+  useEffect(() => {
+    const loadPlan = async () => {
+      try {
+        setLoading(true);
+        setError("");
+        const result = await apiGet("/api/plan", { user_id: userId });
+        setPlan(result.exists ? result : null);
+      } catch (e) {
+        setError(e.message);
+      } finally {
+        setLoading(false);
+      }
+    };
+    loadPlan();
+  }, [userId]);
 
-export default function PlanTab({ showToast }) {
+  const generate = async () => {
+    try {
+      await apiPost("/api/plan/generate", { user_id: userId });
+      showToast("✅", "План сгенерирован");
+      const result = await apiGet("/api/plan", { user_id: userId });
+      setPlan(result.exists ? result : null);
+    } catch (e) {
+      showToast("⚠️", e.message);
+    }
+  };
+
+  if (loading) {
+    return <div className="text-sm" style={{ color: "var(--tg-muted)" }}>Загружаем план...</div>;
+  }
+
+  const daily = plan?.daily_totals || {};
+  const meals = plan?.meals || [];
+
   return (
     <div className="animate-fade-up">
-      {/* AI Plan summary card */}
       <GlassCard
         style={{
           background: "linear-gradient(135deg, rgba(108,99,255,0.15), rgba(0,217,163,0.08))",
@@ -55,24 +54,23 @@ export default function PlanTab({ showToast }) {
           <div className="flex-1">
             <div className="text-[16px] font-extrabold" style={{ color: "var(--tg-text)" }}>ИИ-план на сегодня</div>
             <div className="text-[12px] mt-0.5" style={{ color: "var(--tg-muted)" }}>
-              {DAILY.kcal} ккал · Сбалансированный рацион
+              {plan ? `${daily.kcal || 0} ккал` : "План не найден"}
             </div>
           </div>
           <div
             className="px-2.5 py-1 rounded-full text-[11px] font-bold"
             style={{ background: "rgba(0,217,163,0.15)", color: "#00d9a3" }}
           >
-            АКТИВЕН
+            {plan ? "АКТИВЕН" : "ПУСТО"}
           </div>
         </div>
 
-        {/* Macro grid */}
         <div className="grid grid-cols-4 gap-2">
           {[
-            { label: "Белки",   value: `${DAILY.protein}г`, color: "#ff6584" },
-            { label: "Жиры",    value: `${DAILY.fat}г`,     color: "#ffb347" },
-            { label: "Углев.",  value: `${DAILY.carbs}г`,   color: "#6c63ff" },
-            { label: "Ккал",    value: DAILY.kcal,           color: "#00d9a3" },
+            { label: "Белки",   value: `${daily.protein || 0}г`, color: "#ff6584" },
+            { label: "Жиры",    value: `${daily.fat || 0}г`,     color: "#ffb347" },
+            { label: "Углев.",  value: `${daily.carbs || 0}г`,   color: "#6c63ff" },
+            { label: "Ккал",    value: daily.kcal || 0,          color: "#00d9a3" },
           ].map((m) => (
             <div
               key={m.label}
@@ -86,13 +84,14 @@ export default function PlanTab({ showToast }) {
         </div>
       </GlassCard>
 
+      {error && <div className="text-sm mb-2" style={{ color: "#ff6584" }}>{error}</div>}
       <SectionTitle>Приёмы пищи</SectionTitle>
 
-      {MEALS.map((meal) => (
-        <MealCard key={meal.id} meal={meal} showToast={showToast} />
+      {meals.map((meal, idx) => (
+        <MealCard key={`${meal.type}-${idx}`} meal={meal} showToast={showToast} />
       ))}
 
-      <PillButton variant="outline" onClick={() => showToast("🔄", "Генерируем новый план...")}>
+      <PillButton variant="outline" onClick={generate}>
         🔄 Перегенерировать план
       </PillButton>
     </div>
@@ -100,25 +99,26 @@ export default function PlanTab({ showToast }) {
 }
 
 function MealCard({ meal, showToast }) {
+  const mealColor = "#6c63ff";
   return (
     <div
       className="rounded-[20px] overflow-hidden mb-3"
       style={{ background: "var(--tg-surface)", border: "1px solid var(--tg-border)" }}
     >
       {/* Coloured top stripe */}
-      <div className="h-[3px]" style={{ background: meal.color }} />
+      <div className="h-[3px]" style={{ background: mealColor }} />
 
       {/* Header */}
       <div className="flex items-center justify-between px-4 py-3.5">
         <div className="flex items-center gap-2.5">
-          <span className="text-[22px]">{meal.emoji}</span>
+          <span className="text-[22px]">🍽️</span>
           <div>
-            <div className="text-[16px] font-extrabold" style={{ color: "var(--tg-text)" }}>{meal.name}</div>
+            <div className="text-[16px] font-extrabold" style={{ color: "var(--tg-text)" }}>{meal.dish_name || meal.type}</div>
             <div className="text-[12px] font-semibold" style={{ color: "var(--tg-muted)" }}>{meal.time}</div>
           </div>
         </div>
         <div className="text-right">
-          <div className="text-[20px] font-extrabold leading-none" style={{ color: meal.color }}>{meal.total_kcal}</div>
+          <div className="text-[20px] font-extrabold leading-none" style={{ color: mealColor }}>{meal.total_kcal || 0}</div>
           <div className="text-[11px] mt-0.5" style={{ color: "var(--tg-muted)" }}>ккал</div>
         </div>
       </div>
@@ -128,17 +128,16 @@ function MealCard({ meal, showToast }) {
 
       {/* Items */}
       <div className="px-4 py-3 flex flex-col gap-1.5">
-        {meal.items.map((item, i) => (
+        {(meal.ingredients || []).map((item, i) => (
           <div key={i} className="flex items-center justify-between text-[13px]">
             <div className="flex items-center gap-1.5 font-semibold" style={{ color: "var(--tg-text)" }}>
-              <span>{item.emoji}</span>
               {item.name}
             </div>
             <div
               className="px-2 py-0.5 rounded-lg text-[11px] font-bold"
               style={{ background: "rgba(255,255,255,0.06)", color: "var(--tg-muted)" }}
             >
-              {item.kcal} кк
+              {item.amount} {item.unit}
             </div>
           </div>
         ))}
@@ -149,9 +148,9 @@ function MealCard({ meal, showToast }) {
 
       {/* Footer macros */}
       <div className="flex items-center gap-2 px-4 py-3 overflow-x-auto">
-        <MacroChip label="Б" value={`${meal.protein}г`} color="#ff6584" />
-        <MacroChip label="Ж" value={`${meal.fat}г`}    color="#ffb347" />
-        <MacroChip label="У" value={`${meal.carbs}г`}  color="#6c63ff" />
+        <MacroChip label="Б" value={`${meal.total_protein || 0}г`} color="#ff6584" />
+        <MacroChip label="Ж" value={`${meal.total_fat || 0}г`}    color="#ffb347" />
+        <MacroChip label="У" value={`${meal.total_carbs || 0}г`}  color="#6c63ff" />
         <button
           onClick={() => showToast("✅", "Отмечено как съеденное!")}
           className="ml-auto px-3 py-1.5 rounded-full text-[12px] font-bold cursor-pointer border transition-all active:scale-95"

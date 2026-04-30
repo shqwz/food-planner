@@ -2,6 +2,7 @@ from flask import Blueprint, request, jsonify
 from database import get_db
 from datetime import datetime
 import json
+from services import resolve_user_id, find_product_id, NotFoundError
 
 diary_bp = Blueprint("diary", __name__)
 
@@ -16,15 +17,17 @@ def get_diary():
         return jsonify({"error": "user_id обязателен"}), 400
 
     conn = get_db()
-    user = conn.execute("SELECT id FROM users WHERE telegram_id = ?", (user_id,)).fetchone()
-    if not user:
-        return jsonify({"error": "Пользователь не найден"}), 404
+    try:
+        internal_user_id = resolve_user_id(conn, user_id)
+    except NotFoundError as e:
+        conn.close()
+        return jsonify({"error": str(e)}), 404
 
     meals = conn.execute('''
         SELECT * FROM consumed_meals
         WHERE user_id = ? AND plan_date = ?
         ORDER BY consumed_at ASC
-    ''', (user["id"], date)).fetchall()
+    ''', (internal_user_id, date)).fetchall()
 
     # Суммируем за день
     totals = {"kcal": 0, "protein": 0, "fat": 0, "carbs": 0, "cost": 0}
@@ -72,9 +75,11 @@ def add_meal():
         return jsonify({"error": "user_id и ingredients обязательны"}), 400
 
     conn = get_db()
-    user = conn.execute("SELECT id FROM users WHERE telegram_id = ?", (user_id,)).fetchone()
-    if not user:
-        return jsonify({"error": "Пользователь не найден"}), 404
+    try:
+        internal_user_id = resolve_user_id(conn, user_id)
+    except NotFoundError as e:
+        conn.close()
+        return jsonify({"error": str(e)}), 404
 
     # Считаем итоги
     total_kcal = sum(i.get("kcal", 0) for i in ingredients)
@@ -87,24 +92,20 @@ def add_meal():
     if was_planned:
         for ing in ingredients:
             # Находим продукт в справочнике
-            product = conn.execute(
-                "SELECT id FROM products_ref WHERE LOWER(name) = ?",
-                (ing["name"].lower(),)
-            ).fetchone()
-
-            if product:
+            product_id = find_product_id(conn, ing["name"])
+            if product_id:
                 # Списываем из кладовой
                 conn.execute('''
                     UPDATE pantry
                     SET amount = amount - ?
                     WHERE user_id = ? AND product_id = ? AND amount >= ?
-                ''', (ing["amount"], user["id"], product["id"], ing["amount"]))
+                ''', (ing["amount"], internal_user_id, product_id, ing["amount"]))
 
                 # Снимаем резерв
                 conn.execute('''
                     DELETE FROM reservations
                     WHERE user_id = ? AND product_id = ? AND plan_date = ? AND meal_type = ?
-                ''', (user["id"], product["id"], plan_date, meal_type))
+                ''', (internal_user_id, product_id, plan_date, meal_type))
 
     # Записываем в дневник
     conn.execute('''
@@ -113,7 +114,7 @@ def add_meal():
          total_kcal, total_protein, total_fat, total_carbs, total_cost, was_planned, notes)
         VALUES (?, datetime('now'), ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
     ''', (
-        user["id"], plan_date, meal_type, dish_name,
+        internal_user_id, plan_date, meal_type, dish_name,
         json.dumps(ingredients, ensure_ascii=False),
         total_kcal, total_protein, total_fat, total_carbs, total_cost,
         int(was_planned), notes
@@ -141,7 +142,13 @@ def delete_meal(meal_id):
     """Удалить запись из дневника"""
     user_id = request.args.get("user_id")
     conn = get_db()
-    conn.execute("DELETE FROM consumed_meals WHERE id = ? AND user_id = ?", (meal_id, user_id))
+    try:
+        internal_user_id = resolve_user_id(conn, user_id)
+    except NotFoundError as e:
+        conn.close()
+        return jsonify({"error": str(e)}), 404
+
+    conn.execute("DELETE FROM consumed_meals WHERE id = ? AND user_id = ?", (meal_id, internal_user_id))
     conn.commit()
     conn.close()
     return jsonify({"status": "ok"})
@@ -158,9 +165,11 @@ def get_history():
         return jsonify({"error": "user_id обязателен"}), 400
 
     conn = get_db()
-    user = conn.execute("SELECT id FROM users WHERE telegram_id = ?", (user_id,)).fetchone()
-    if not user:
-        return jsonify({"error": "Пользователь не найден"}), 404
+    try:
+        internal_user_id = resolve_user_id(conn, user_id)
+    except NotFoundError as e:
+        conn.close()
+        return jsonify({"error": str(e)}), 404
 
     rows = conn.execute('''
         SELECT plan_date,
@@ -174,7 +183,7 @@ def get_history():
         WHERE user_id = ? AND plan_date BETWEEN ? AND ?
         GROUP BY plan_date
         ORDER BY plan_date DESC
-    ''', (user["id"], from_date, to_date)).fetchall()
+    ''', (internal_user_id, from_date, to_date)).fetchall()
 
     conn.close()
     return jsonify([dict(r) for r in rows])
@@ -188,14 +197,16 @@ def get_measurements():
         return jsonify({"error": "user_id обязателен"}), 400
 
     conn = get_db()
-    user = conn.execute("SELECT id FROM users WHERE telegram_id = ?", (user_id,)).fetchone()
-    if not user:
-        return jsonify({"error": "Пользователь не найден"}), 404
+    try:
+        internal_user_id = resolve_user_id(conn, user_id)
+    except NotFoundError as e:
+        conn.close()
+        return jsonify({"error": str(e)}), 404
 
     rows = conn.execute('''
         SELECT * FROM body_measurements
         WHERE user_id = ? ORDER BY measure_date DESC
-    ''', (user["id"],)).fetchall()
+    ''', (internal_user_id,)).fetchall()
     conn.close()
     return jsonify([dict(r) for r in rows])
 
@@ -211,15 +222,17 @@ def add_measurement():
         return jsonify({"error": "user_id обязателен"}), 400
 
     conn = get_db()
-    user = conn.execute("SELECT id FROM users WHERE telegram_id = ?", (user_id,)).fetchone()
-    if not user:
-        return jsonify({"error": "Пользователь не найден"}), 404
+    try:
+        internal_user_id = resolve_user_id(conn, user_id)
+    except NotFoundError as e:
+        conn.close()
+        return jsonify({"error": str(e)}), 404
 
     conn.execute('''
         INSERT OR REPLACE INTO body_measurements (user_id, measure_date, weight, waist, chest, arms, notes)
         VALUES (?, ?, ?, ?, ?, ?, ?)
     ''', (
-        user["id"], date,
+        internal_user_id, date,
         data.get("weight"), data.get("waist"),
         data.get("chest"), data.get("arms"),
         data.get("notes", "")
