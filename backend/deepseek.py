@@ -2,7 +2,7 @@ import requests
 import json
 import time
 import re
-from config import OPENROUTER_API_KEY
+from config import openrouter_api_key
 
 OPENROUTER_URL = "https://openrouter.ai/api/v1/chat/completions"
 
@@ -11,13 +11,18 @@ MODEL = "google/gemini-2.0-flash-001"  # бесплатная, 200 запрос�
 
 
 def call_ai(prompt: str, system_prompt: str = None, temperature: float = 0.7) -> dict:
-    if not OPENROUTER_API_KEY:
-        raise Exception("OPENROUTER_API_KEY не задан в окружении")
+    """Отправляет запрос к OpenRouter и возвращает ответ как dict.
 
+    Делает несколько попыток при временных ошибках.
     """
-    Отправляет запрос к OpenRouter и возвращает ответ как dict.
-    С повторными попытками при ошибках.
-    """
+    api_key = openrouter_api_key()
+    if not api_key:
+        raise Exception(
+            "OPENROUTER_API_KEY не найден: в PythonAnywhere задай ключ в WSGI до импорта app "
+            "(import os → os.environ[\"OPENROUTER_API_KEY\"] = \"...\" → from app import …) "
+            "или положи .env с OPENROUTER_API_KEY в корень репозитория на сервере и сделай Reload."
+        )
+
     if not system_prompt:
         system_prompt = (
             "Ты — профессиональный нутрициолог и спортивный диетолог. "
@@ -27,7 +32,7 @@ def call_ai(prompt: str, system_prompt: str = None, temperature: float = 0.7) ->
         )
 
     headers = {
-        "Authorization": f"Bearer {OPENROUTER_API_KEY}",
+        "Authorization": f"Bearer {api_key}",
         "Content-Type": "application/json",
         "HTTP-Referer": "http://localhost:5000",
         "X-Title": "Food Planner"
