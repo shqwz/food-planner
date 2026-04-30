@@ -1,0 +1,978 @@
+<!DOCTYPE html>
+<html>
+<head>
+<meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover">
+<style>
+  @import url('https://fonts.googleapis.com/css2?family=Manrope:wght@400;500;600;700&display=swap');
+
+  :root {
+    --c-bg: #F5F4F0;
+    --c-surface: #FFFFFF;
+    --c-surface2: #F0EEE8;
+    --c-border: rgba(0,0,0,0.08);
+    --c-border-mid: rgba(0,0,0,0.14);
+    --c-text-primary: #18180F;
+    --c-text-secondary: #6B6B60;
+    --c-text-tertiary: #A0A097;
+    --c-accent: #2A6E4F;
+    --c-accent-light: #E3EFE9;
+    --c-accent2: #B85C2A;
+    --c-accent2-light: #F5EBE3;
+    --c-warn: #B58B00;
+    --c-warn-light: #F5EFD6;
+    --c-danger: #B83232;
+    --c-danger-light: #F5E3E3;
+    --c-nav-h: 64px;
+    --c-safe-bottom: env(safe-area-inset-bottom, 0px);
+    --r-sm: 8px;
+    --r-md: 12px;
+    --r-lg: 16px;
+    --r-xl: 20px;
+    --shadow-sm: 0 1px 3px rgba(0,0,0,0.06), 0 1px 2px rgba(0,0,0,0.04);
+    --shadow-md: 0 4px 12px rgba(0,0,0,0.08);
+    --font: 'Manrope', -apple-system, sans-serif;
+    --sp-2: 4px; --sp-3: 8px; --sp-4: 12px; --sp-5: 16px; --sp-6: 20px; --sp-7: 24px; --sp-8: 28px; --sp-9: 32px;
+  }
+  [data-theme="dark"] {
+    --c-bg: #111110;
+    --c-surface: #1C1C1A;
+    --c-surface2: #252520;
+    --c-border: rgba(255,255,255,0.07);
+    --c-border-mid: rgba(255,255,255,0.12);
+    --c-text-primary: #EDECEA;
+    --c-text-secondary: #9B9B90;
+    --c-text-tertiary: #5C5C54;
+    --c-accent: #4A9E74;
+    --c-accent-light: #1A2E23;
+    --c-accent2: #D4713A;
+    --c-accent2-light: #2A1B0F;
+    --c-warn: #D4A726;
+    --c-warn-light: #241E08;
+    --c-danger: #D45050;
+    --c-danger-light: #2A0F0F;
+    --shadow-sm: 0 1px 3px rgba(0,0,0,0.3);
+    --shadow-md: 0 4px 12px rgba(0,0,0,0.4);
+  }
+
+  * { box-sizing: border-box; margin: 0; padding: 0; -webkit-tap-highlight-color: transparent; }
+
+  body {
+    font-family: var(--font);
+    background: var(--c-bg);
+    color: var(--c-text-primary);
+    font-size: 15px;
+    line-height: 1.5;
+    min-height: 100vh;
+    overflow-x: hidden;
+  }
+
+  .app {
+    max-width: 390px;
+    margin: 0 auto;
+    min-height: 100vh;
+    position: relative;
+    display: flex;
+    flex-direction: column;
+    background: var(--c-bg);
+  }
+
+  .screen { display: none; flex-direction: column; flex: 1; padding-bottom: calc(var(--c-nav-h) + 8px + var(--c-safe-bottom)); }
+  .screen.active { display: flex; }
+
+  /* TOP BAR */
+  .topbar {
+    position: sticky; top: 0; z-index: 50;
+    background: var(--c-surface);
+    border-bottom: 0.5px solid var(--c-border);
+    padding: var(--sp-4) var(--sp-5);
+    display: flex; align-items: center; justify-content: space-between;
+    min-height: 52px;
+  }
+  .topbar-title { font-size: 17px; font-weight: 600; letter-spacing: -0.3px; }
+  .topbar-sub { font-size: 12px; color: var(--c-text-secondary); margin-top: 1px; }
+  .topbar-actions { display: flex; gap: 8px; align-items: center; }
+
+  /* ICON BTN */
+  .icon-btn {
+    width: 34px; height: 34px;
+    border-radius: 50%;
+    border: none;
+    background: var(--c-surface2);
+    color: var(--c-text-secondary);
+    display: flex; align-items: center; justify-content: center;
+    cursor: pointer;
+    font-size: 16px;
+    transition: background 0.15s;
+  }
+  .icon-btn:active { background: var(--c-border-mid); }
+
+  /* BOTTOM NAV */
+  .bottom-nav {
+    position: fixed; bottom: 0; left: 50%; transform: translateX(-50%);
+    width: 100%; max-width: 390px;
+    z-index: 100;
+    background: var(--c-surface);
+    border-top: 0.5px solid var(--c-border);
+    display: flex;
+    height: calc(var(--c-nav-h) + var(--c-safe-bottom));
+    padding-bottom: var(--c-safe-bottom);
+  }
+  .nav-item {
+    flex: 1; display: flex; flex-direction: column;
+    align-items: center; justify-content: center;
+    gap: 4px; cursor: pointer; border: none;
+    background: transparent;
+    color: var(--c-text-tertiary);
+    font-family: var(--font);
+    font-size: 10px; font-weight: 500;
+    letter-spacing: 0.3px;
+    transition: color 0.15s;
+    padding-top: 8px;
+    -webkit-tap-highlight-color: transparent;
+  }
+  .nav-item.active { color: var(--c-accent); }
+  .nav-item svg { width: 22px; height: 22px; }
+
+  /* CONTENT AREA */
+  .content { flex: 1; overflow-y: auto; padding: var(--sp-5); display: flex; flex-direction: column; gap: var(--sp-4); }
+
+  /* CARDS */
+  .card {
+    background: var(--c-surface);
+    border-radius: var(--r-lg);
+    border: 0.5px solid var(--c-border);
+    overflow: hidden;
+  }
+  .card-pad { padding: var(--sp-5); }
+
+  /* TODAY HERO */
+  .today-hero {
+    background: var(--c-surface);
+    border-radius: var(--r-xl);
+    border: 0.5px solid var(--c-border);
+    padding: var(--sp-6);
+    display: flex;
+    flex-direction: column;
+    gap: var(--sp-4);
+  }
+  .hero-label { font-size: 11px; font-weight: 600; letter-spacing: 0.8px; text-transform: uppercase; color: var(--c-accent); }
+  .hero-title { font-size: 22px; font-weight: 700; letter-spacing: -0.5px; line-height: 1.2; color: var(--c-text-primary); }
+  .hero-sub { font-size: 13px; color: var(--c-text-secondary); }
+
+  /* PROGRESS BAR */
+  .progress-row { display: flex; flex-direction: column; gap: 6px; }
+  .progress-header { display: flex; justify-content: space-between; align-items: baseline; }
+  .progress-label { font-size: 12px; color: var(--c-text-secondary); }
+  .progress-value { font-size: 12px; font-weight: 600; color: var(--c-text-primary); }
+  .progress-track {
+    height: 6px; background: var(--c-surface2);
+    border-radius: 3px; overflow: hidden;
+  }
+  .progress-fill {
+    height: 100%; border-radius: 3px;
+    background: var(--c-accent);
+    transition: width 0.6s cubic-bezier(0.34, 1.56, 0.64, 1);
+  }
+  .progress-fill.over { background: var(--c-danger); }
+  .progress-fill.mid { background: var(--c-warn); }
+
+  /* MACRO PILLS */
+  .macro-row { display: flex; gap: 8px; }
+  .macro-pill {
+    flex: 1; background: var(--c-surface2);
+    border-radius: var(--r-sm);
+    padding: 8px 10px;
+    display: flex; flex-direction: column; gap: 2px;
+  }
+  .macro-val { font-size: 15px; font-weight: 700; letter-spacing: -0.3px; }
+  .macro-lab { font-size: 10px; font-weight: 500; text-transform: uppercase; letter-spacing: 0.6px; color: var(--c-text-secondary); }
+
+  /* MEAL SECTION */
+  .section-header {
+    display: flex; justify-content: space-between; align-items: center;
+    padding: var(--sp-4) var(--sp-5) var(--sp-3);
+  }
+  .section-title { font-size: 13px; font-weight: 600; letter-spacing: -0.1px; color: var(--c-text-secondary); text-transform: uppercase; letter-spacing: 0.6px; font-size: 11px; }
+  .section-action { font-size: 13px; font-weight: 600; color: var(--c-accent); cursor: pointer; }
+
+  /* MEAL ITEM */
+  .meal-item {
+    display: flex; align-items: center; gap: var(--sp-4);
+    padding: var(--sp-4) var(--sp-5);
+    border-bottom: 0.5px solid var(--c-border);
+    cursor: pointer;
+    transition: background 0.1s;
+  }
+  .meal-item:last-child { border-bottom: none; }
+  .meal-item:active { background: var(--c-surface2); }
+  .meal-icon {
+    width: 40px; height: 40px; border-radius: var(--r-sm);
+    display: flex; align-items: center; justify-content: center;
+    font-size: 20px; flex-shrink: 0;
+  }
+  .meal-icon.breakfast { background: var(--c-warn-light); }
+  .meal-icon.lunch { background: var(--c-accent-light); }
+  .meal-icon.dinner { background: var(--c-accent2-light); }
+  .meal-icon.snack { background: var(--c-surface2); }
+  .meal-info { flex: 1; min-width: 0; }
+  .meal-name { font-size: 15px; font-weight: 500; color: var(--c-text-primary); white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
+  .meal-meta { font-size: 12px; color: var(--c-text-secondary); margin-top: 1px; }
+  .meal-kcal { font-size: 14px; font-weight: 600; color: var(--c-text-primary); white-space: nowrap; }
+  .meal-check { width: 22px; height: 22px; border-radius: 50%; border: 1.5px solid var(--c-border-mid); display: flex; align-items: center; justify-content: center; flex-shrink: 0; transition: all 0.2s; }
+  .meal-check.done { background: var(--c-accent); border-color: var(--c-accent); }
+  .meal-check.done::after { content: ''; width: 6px; height: 10px; border: 1.5px solid #fff; border-top: none; border-left: none; transform: rotate(45deg) translate(-1px, -1px); display: block; }
+
+  /* ADD MEAL BTN */
+  .add-meal-row {
+    display: flex; align-items: center; gap: var(--sp-4);
+    padding: var(--sp-4) var(--sp-5);
+    cursor: pointer;
+    transition: background 0.1s;
+  }
+  .add-meal-row:active { background: var(--c-surface2); }
+  .add-icon {
+    width: 40px; height: 40px; border-radius: var(--r-sm);
+    background: var(--c-surface2); border: 1.5px dashed var(--c-border-mid);
+    display: flex; align-items: center; justify-content: center;
+    color: var(--c-text-tertiary); font-size: 20px;
+  }
+  .add-text { font-size: 14px; color: var(--c-text-secondary); font-weight: 500; }
+
+  /* MOTIVATION CARD */
+  .motive-card {
+    background: var(--c-accent-light);
+    border-radius: var(--r-lg);
+    padding: var(--sp-5);
+    border: 0.5px solid rgba(42,110,79,0.15);
+    display: flex; align-items: flex-start; gap: var(--sp-4);
+  }
+  .motive-icon { font-size: 22px; flex-shrink: 0; margin-top: 1px; }
+  .motive-title { font-size: 14px; font-weight: 600; color: var(--c-accent); }
+  .motive-body { font-size: 13px; color: var(--c-text-secondary); margin-top: 2px; line-height: 1.4; }
+
+  /* DIARY */
+  .day-nav {
+    display: flex; align-items: center; justify-content: space-between;
+    padding: 10px var(--sp-5);
+    background: var(--c-surface);
+    border-bottom: 0.5px solid var(--c-border);
+    gap: 8px;
+  }
+  .day-btn { padding: 6px 10px; border-radius: var(--r-sm); border: none; background: var(--c-surface2); font-family: var(--font); font-size: 13px; font-weight: 600; color: var(--c-text-secondary); cursor: pointer; }
+  .day-current { font-size: 14px; font-weight: 700; color: var(--c-text-primary); text-align: center; flex: 1; }
+
+  /* DIARY ENTRY */
+  .diary-entry {
+    background: var(--c-surface);
+    border-radius: var(--r-lg);
+    border: 0.5px solid var(--c-border);
+    overflow: hidden;
+  }
+  .diary-meal-header {
+    display: flex; align-items: center; justify-content: space-between;
+    padding: 12px var(--sp-5);
+    background: var(--c-surface2);
+    border-bottom: 0.5px solid var(--c-border);
+  }
+  .diary-meal-name { font-size: 13px; font-weight: 700; letter-spacing: -0.1px; }
+  .diary-meal-kcal { font-size: 12px; font-weight: 600; color: var(--c-accent); background: var(--c-accent-light); padding: 3px 8px; border-radius: 20px; }
+  .diary-food-item { display: flex; justify-content: space-between; align-items: center; padding: 10px var(--sp-5); border-bottom: 0.5px solid var(--c-border); }
+  .diary-food-item:last-child { border-bottom: none; }
+  .diary-food-name { font-size: 14px; color: var(--c-text-primary); }
+  .diary-food-meta { font-size: 12px; color: var(--c-text-secondary); margin-top: 1px; }
+  .diary-food-right { text-align: right; }
+  .diary-food-kcal { font-size: 13px; font-weight: 600; }
+  .diary-food-grams { font-size: 11px; color: var(--c-text-tertiary); }
+
+  /* PANTRY */
+  .search-bar {
+    display: flex; align-items: center; gap: 10px;
+    background: var(--c-surface);
+    border-radius: var(--r-md);
+    border: 0.5px solid var(--c-border-mid);
+    padding: 10px var(--sp-4);
+    box-shadow: var(--shadow-sm);
+  }
+  .search-bar svg { width: 16px; height: 16px; color: var(--c-text-tertiary); flex-shrink: 0; }
+  .search-input { border: none; background: transparent; font-family: var(--font); font-size: 15px; color: var(--c-text-primary); outline: none; flex: 1; }
+  .search-input::placeholder { color: var(--c-text-tertiary); }
+
+  .pantry-cat { font-size: 11px; font-weight: 700; text-transform: uppercase; letter-spacing: 0.8px; color: var(--c-text-tertiary); padding: 0 0 var(--sp-3); }
+  .pantry-item {
+    display: flex; align-items: center; gap: var(--sp-4);
+    padding: var(--sp-4) var(--sp-5);
+    background: var(--c-surface);
+    border-bottom: 0.5px solid var(--c-border);
+    cursor: pointer;
+  }
+  .pantry-item:first-of-type { border-radius: var(--r-lg) var(--r-lg) 0 0; }
+  .pantry-item:last-child { border-bottom: none; border-radius: 0 0 var(--r-lg) var(--r-lg); }
+  .pantry-dot { width: 10px; height: 10px; border-radius: 50%; flex-shrink: 0; }
+  .pantry-dot.ok { background: var(--c-accent); }
+  .pantry-dot.low { background: var(--c-warn); }
+  .pantry-dot.out { background: var(--c-danger); }
+  .pantry-name { flex: 1; font-size: 15px; font-weight: 500; }
+  .pantry-qty { font-size: 13px; color: var(--c-text-secondary); }
+  .pantry-badge { font-size: 11px; font-weight: 600; padding: 3px 8px; border-radius: 20px; }
+  .pantry-badge.ok { background: var(--c-accent-light); color: var(--c-accent); }
+  .pantry-badge.low { background: var(--c-warn-light); color: var(--c-warn); }
+  .pantry-badge.out { background: var(--c-danger-light); color: var(--c-danger); }
+
+  /* SHOPPING */
+  .shop-progress { display: flex; gap: 6px; align-items: center; font-size: 13px; color: var(--c-text-secondary); font-weight: 500; }
+  .shop-prog-fill { flex: 1; height: 4px; background: var(--c-surface2); border-radius: 2px; overflow: hidden; }
+  .shop-prog-inner { height: 100%; background: var(--c-accent); border-radius: 2px; transition: width 0.4s ease; }
+  .shop-item {
+    display: flex; align-items: center; gap: var(--sp-4);
+    padding: var(--sp-4) var(--sp-5);
+    background: var(--c-surface);
+    border-bottom: 0.5px solid var(--c-border);
+    transition: opacity 0.2s;
+    cursor: pointer;
+  }
+  .shop-item:first-child { border-radius: var(--r-lg) var(--r-lg) 0 0; }
+  .shop-item:last-child { border-bottom: none; border-radius: 0 0 var(--r-lg) var(--r-lg); }
+  .shop-item.checked { opacity: 0.5; }
+  .shop-check { width: 22px; height: 22px; border-radius: 50%; border: 1.5px solid var(--c-border-mid); flex-shrink: 0; display: flex; align-items: center; justify-content: center; transition: all 0.2s; }
+  .shop-check.done { background: var(--c-accent); border-color: var(--c-accent); }
+  .shop-check.done::after { content: ''; width: 6px; height: 10px; border: 1.5px solid #fff; border-top: none; border-left: none; transform: rotate(45deg) translate(-1px, -1px); display: block; }
+  .shop-name { flex: 1; font-size: 15px; font-weight: 500; }
+  .shop-qty { font-size: 13px; color: var(--c-text-secondary); }
+  .shop-del { width: 28px; height: 28px; border-radius: 50%; background: var(--c-danger-light); border: none; color: var(--c-danger); font-size: 14px; display: flex; align-items: center; justify-content: center; cursor: pointer; }
+
+  /* STATES: loading, empty, error */
+  .state-container { flex: 1; display: flex; flex-direction: column; align-items: center; justify-content: center; gap: var(--sp-4); padding: var(--sp-9); text-align: center; }
+  .state-icon { font-size: 48px; }
+  .state-title { font-size: 18px; font-weight: 700; letter-spacing: -0.3px; }
+  .state-body { font-size: 14px; color: var(--c-text-secondary); line-height: 1.5; }
+  .state-action { margin-top: var(--sp-3); padding: 12px 24px; background: var(--c-accent); color: #fff; border: none; border-radius: var(--r-md); font-family: var(--font); font-size: 15px; font-weight: 600; cursor: pointer; }
+
+  /* SKELETON */
+  .skeleton { background: linear-gradient(90deg, var(--c-surface2) 25%, var(--c-border) 50%, var(--c-surface2) 75%); background-size: 200% 100%; animation: shimmer 1.4s infinite; border-radius: var(--r-sm); }
+  @keyframes shimmer { 0% { background-position: -200% 0; } 100% { background-position: 200% 0; } }
+
+  /* FLOATING ACTION */
+  .fab {
+    position: fixed;
+    bottom: calc(var(--c-nav-h) + 16px + var(--c-safe-bottom));
+    right: calc(50% - 195px + 16px);
+    width: 52px; height: 52px; border-radius: 50%;
+    background: var(--c-accent);
+    border: none;
+    color: #fff;
+    font-size: 24px;
+    display: flex; align-items: center; justify-content: center;
+    cursor: pointer;
+    box-shadow: 0 4px 16px rgba(42,110,79,0.35);
+    z-index: 90;
+    transition: transform 0.15s, box-shadow 0.15s;
+    font-family: var(--font);
+  }
+  .fab:active { transform: scale(0.94); box-shadow: 0 2px 8px rgba(42,110,79,0.2); }
+
+  /* THEME TOGGLE */
+  .theme-toggle { font-size: 14px; cursor: pointer; }
+
+  /* NOTIFICATION DOT */
+  .notif-dot { width: 6px; height: 6px; border-radius: 50%; background: var(--c-danger); position: absolute; top: -1px; right: -1px; }
+
+  /* STREAK */
+  .streak-row { display: flex; gap: 6px; align-items: center; }
+  .streak-day { width: 28px; height: 28px; border-radius: 6px; display: flex; align-items: center; justify-content: center; font-size: 10px; font-weight: 700; flex-direction: column; gap: 1px; }
+  .streak-day.done { background: var(--c-accent); color: #fff; }
+  .streak-day.missed { background: var(--c-surface2); color: var(--c-text-tertiary); }
+  .streak-day.today { background: var(--c-accent-light); color: var(--c-accent); border: 1.5px solid var(--c-accent); }
+  .streak-label { font-size: 8px; font-weight: 600; text-transform: uppercase; letter-spacing: 0.4px; }
+  .streak-num { font-size: 12px; font-weight: 700; }
+
+  /* TABS */
+  .tabs { display: flex; gap: 0; background: var(--c-surface2); border-radius: var(--r-md); padding: 3px; margin: 0 var(--sp-5) var(--sp-3); }
+  .tab-btn { flex: 1; padding: 7px 4px; border: none; border-radius: var(--r-sm); background: transparent; font-family: var(--font); font-size: 13px; font-weight: 600; color: var(--c-text-secondary); cursor: pointer; transition: all 0.2s; }
+  .tab-btn.active { background: var(--c-surface); color: var(--c-text-primary); box-shadow: var(--shadow-sm); }
+
+  /* DIVIDER */
+  .divider { height: 0.5px; background: var(--c-border); margin: var(--sp-2) 0; }
+
+  /* SCROLL AREA FIX */
+  .content { padding-bottom: calc(var(--c-nav-h) + 24px + var(--c-safe-bottom)); }
+
+  /* SWIPE AREA (visual only) */
+  .drag-handle { width: 36px; height: 4px; background: var(--c-border-mid); border-radius: 2px; margin: 8px auto 0; }
+</style>
+</head>
+<body>
+
+<div class="app" id="app">
+
+  <!-- TOP BAR (dynamic per screen) -->
+  <div class="topbar" id="topbar">
+    <div>
+      <div class="topbar-title" id="tb-title">Сегодня</div>
+      <div class="topbar-sub" id="tb-sub">Среда, 30 апреля</div>
+    </div>
+    <div class="topbar-actions">
+      <button class="icon-btn theme-toggle" id="themeBtn" title="Тема">
+        <svg viewBox="0 0 20 20" fill="none" stroke="currentColor" stroke-width="1.5" stroke-linecap="round" stroke-linejoin="round" width="18" height="18">
+          <circle cx="10" cy="10" r="4"/>
+          <path d="M10 1v2M10 17v2M1 10h2M17 10h2M3.22 3.22l1.42 1.42M15.36 15.36l1.42 1.42M3.22 16.78l1.42-1.42M15.36 4.64l1.42-1.42"/>
+        </svg>
+      </button>
+      <button class="icon-btn" style="position:relative" onclick="showNotif()">
+        <svg viewBox="0 0 20 20" fill="none" stroke="currentColor" stroke-width="1.5" stroke-linecap="round" stroke-linejoin="round" width="18" height="18">
+          <path d="M10 2a6 6 0 0 1 6 6v3l2 2H2l2-2V8a6 6 0 0 1 6-6z"/>
+          <path d="M8 16a2 2 0 0 0 4 0"/>
+        </svg>
+        <span class="notif-dot"></span>
+      </button>
+    </div>
+  </div>
+
+  <!-- SCREEN: TODAY/PLAN -->
+  <div class="screen active" id="screen-today">
+    <div class="content" id="today-content">
+      <!-- skeleton / real / empty / error toggled via JS -->
+    </div>
+  </div>
+
+  <!-- SCREEN: DIARY -->
+  <div class="screen" id="screen-diary">
+    <div class="day-nav">
+      <button class="day-btn" onclick="diaryNav(-1)">‹ Вчера</button>
+      <div class="day-current" id="diary-day-label">Среда, 30 апреля</div>
+      <button class="day-btn" id="diary-next-btn" onclick="diaryNav(1)" style="visibility:hidden">Завтра ›</button>
+    </div>
+    <div class="content" id="diary-content"></div>
+  </div>
+
+  <!-- SCREEN: PANTRY -->
+  <div class="screen" id="screen-pantry">
+    <div class="content" id="pantry-content"></div>
+  </div>
+
+  <!-- SCREEN: SHOPPING -->
+  <div class="screen" id="screen-shopping">
+    <div class="content" id="shopping-content"></div>
+  </div>
+
+  <!-- FAB -->
+  <button class="fab" id="fab" onclick="fabAction()">+</button>
+
+  <!-- BOTTOM NAV -->
+  <nav class="bottom-nav">
+    <button class="nav-item active" id="nav-today" onclick="navigate('today')">
+      <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.7" stroke-linecap="round" stroke-linejoin="round">
+        <rect x="3" y="4" width="18" height="18" rx="3"/>
+        <path d="M16 2v4M8 2v4M3 10h18"/>
+        <circle cx="12" cy="16" r="2" fill="currentColor" stroke="none"/>
+      </svg>
+      Сегодня
+    </button>
+    <button class="nav-item" id="nav-diary" onclick="navigate('diary')">
+      <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.7" stroke-linecap="round" stroke-linejoin="round">
+        <path d="M4 4h16v16H4z" rx="2"/>
+        <path d="M8 8h8M8 12h8M8 16h5"/>
+      </svg>
+      Дневник
+    </button>
+    <button class="nav-item" id="nav-pantry" onclick="navigate('pantry')">
+      <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.7" stroke-linecap="round" stroke-linejoin="round">
+        <rect x="5" y="3" width="14" height="18" rx="2"/>
+        <path d="M8 7h8M8 11h6M8 15h4"/>
+        <path d="M5 7h14"/>
+      </svg>
+      Кладовая
+    </button>
+    <button class="nav-item" id="nav-shopping" onclick="navigate('shopping')">
+      <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.7" stroke-linecap="round" stroke-linejoin="round">
+        <path d="M6 2L3 6v14a2 2 0 0 0 2 2h14a2 2 0 0 0 2-2V6l-3-4z"/>
+        <path d="M3 6h18"/>
+        <path d="M16 10a4 4 0 0 1-8 0"/>
+      </svg>
+      Список
+    </button>
+  </nav>
+
+</div>
+
+<script>
+// ─── STATE ────────────────────────────────────────────────────────
+let currentScreen = 'today';
+let currentTheme = 'light';
+let todayState = 'loading'; // loading | empty | error | success
+let diaryOffset = 0;
+let shopItems = [
+  { id:1, name:'Куриная грудка', qty:'500 г', done:false },
+  { id:2, name:'Овсянка', qty:'1 кг', done:false },
+  { id:3, name:'Греческий йогурт', qty:'4 шт', done:true },
+  { id:4, name:'Авокадо', qty:'2 шт', done:false },
+  { id:5, name:'Брокколи', qty:'300 г', done:true },
+  { id:6, name:'Лосось', qty:'250 г', done:false },
+  { id:7, name:'Гречка', qty:'800 г', done:false },
+];
+let meals = [
+  { type:'breakfast', icon:'🥣', name:'Овсянка с ягодами', time:'08:00', kcal:320, protein:12, fat:6, carbs:52, done:true },
+  { type:'lunch', icon:'🥗', name:'Куриный салат', time:'13:00', kcal:480, protein:38, fat:14, carbs:28, done:true },
+  { type:'dinner', icon:'🍽', name:'Лосось с овощами', time:'19:00', kcal:540, protein:42, fat:22, carbs:18, done:false },
+  { type:'snack', icon:'🍎', name:'Яблоко + орехи', time:'16:00', kcal:185, protein:4, fat:10, carbs:22, done:false },
+];
+
+// ─── THEME ────────────────────────────────────────────────────────
+const themeBtn = document.getElementById('themeBtn');
+function toggleTheme() {
+  currentTheme = currentTheme === 'light' ? 'dark' : 'light';
+  document.getElementById('app').setAttribute('data-theme', currentTheme === 'dark' ? 'dark' : '');
+  themeBtn.innerHTML = currentTheme === 'dark'
+    ? `<svg viewBox="0 0 20 20" fill="none" stroke="currentColor" stroke-width="1.5" stroke-linecap="round" stroke-linejoin="round" width="18" height="18"><path d="M17.5 12A7.5 7.5 0 0 1 5 4.5a7.5 7.5 0 1 0 12.5 7.5z"/></svg>`
+    : `<svg viewBox="0 0 20 20" fill="none" stroke="currentColor" stroke-width="1.5" stroke-linecap="round" stroke-linejoin="round" width="18" height="18"><circle cx="10" cy="10" r="4"/><path d="M10 1v2M10 17v2M1 10h2M17 10h2M3.22 3.22l1.42 1.42M15.36 15.36l1.42 1.42M3.22 16.78l1.42-1.42M15.36 4.64l1.42-1.42"/></svg>`;
+}
+themeBtn.addEventListener('click', toggleTheme);
+
+// ─── NAVIGATION ───────────────────────────────────────────────────
+const titles = { today:'Сегодня', diary:'Дневник', pantry:'Кладовая', shopping:'Список покупок' };
+const subs = { today:'Среда, 30 апреля', diary:'', pantry:'Управление запасами', shopping:'' };
+
+function navigate(screen) {
+  document.querySelectorAll('.screen').forEach(s => s.classList.remove('active'));
+  document.querySelectorAll('.nav-item').forEach(n => n.classList.remove('active'));
+  document.getElementById('screen-' + screen).classList.add('active');
+  document.getElementById('nav-' + screen).classList.add('active');
+  document.getElementById('tb-title').textContent = titles[screen];
+  document.getElementById('tb-sub').textContent = subs[screen];
+  currentScreen = screen;
+  render(screen);
+  // FAB visibility
+  document.getElementById('fab').style.display = screen === 'today' || screen === 'pantry' || screen === 'shopping' ? 'flex' : 'none';
+}
+
+function fabAction() {
+  if(currentScreen === 'today') {
+    alert('+ Добавить приём пищи');
+  } else if(currentScreen === 'shopping') {
+    addShopItem();
+  } else if(currentScreen === 'pantry') {
+    alert('+ Добавить продукт');
+  }
+}
+
+function showNotif() { alert('Напоминание: не забудьте отметить ужин сегодня!'); }
+
+// ─── RENDER DISPATCHER ────────────────────────────────────────────
+function render(screen) {
+  if(screen === 'today') renderToday();
+  if(screen === 'diary') renderDiary();
+  if(screen === 'pantry') renderPantry();
+  if(screen === 'shopping') renderShopping();
+}
+
+// ─── TODAY SCREEN ─────────────────────────────────────────────────
+function renderToday() {
+  const c = document.getElementById('today-content');
+  if(todayState === 'loading') { c.innerHTML = skeletonHTML(); return; }
+  if(todayState === 'error') { c.innerHTML = errorHTML('Не удалось загрузить план', 'Проверьте соединение и попробуйте снова', () => { todayState='loading'; renderToday(); setTimeout(() => { todayState='success'; renderToday(); }, 1200); }); return; }
+  if(todayState === 'empty') { c.innerHTML = emptyTodayHTML(); return; }
+
+  const done = meals.filter(m=>m.done);
+  const totalKcal = meals.reduce((s,m)=>s+m.kcal,0);
+  const doneKcal = done.reduce((s,m)=>s+m.kcal,0);
+  const goalKcal = 2100;
+  const pct = Math.min(100, Math.round(doneKcal / goalKcal * 100));
+  const totalP = meals.reduce((s,m)=>s+m.protein,0);
+  const totalF = meals.reduce((s,m)=>s+m.fat,0);
+  const totalC = meals.reduce((s,m)=>s+m.carbs,0);
+  const doneP = done.reduce((s,m)=>s+m.protein,0);
+  const doneF = done.reduce((s,m)=>s+m.fat,0);
+  const doneC = done.reduce((s,m)=>s+m.carbs,0);
+  const fillClass = pct > 100 ? 'over' : pct > 70 ? 'mid' : '';
+
+  const days = ['Пн','Вт','Ср','Чт','Пт','Сб','Вс'];
+  const streak = [true,true,true,false,true,true,'today'];
+  const streakHTML = days.map((d,i) => {
+    const cls = streak[i] === 'today' ? 'today' : streak[i] ? 'done' : 'missed';
+    return `<div class="streak-day ${cls}"><span class="streak-label">${d}</span><span class="streak-num">${streak[i]==='today'?'·':streak[i]?'✓':'—'}</span></div>`;
+  }).join('');
+
+  const mealsHTML = meals.map((m,i) => `
+    <div class="meal-item" onclick="toggleMeal(${i})">
+      <div class="meal-icon ${m.type}">${m.icon}</div>
+      <div class="meal-info">
+        <div class="meal-name">${m.name}</div>
+        <div class="meal-meta">${m.time} · Б${m.protein}г / Ж${m.fat}г / У${m.carbs}г</div>
+      </div>
+      <div class="meal-kcal">${m.kcal}</div>
+      <div class="meal-check ${m.done?'done':''}"></div>
+    </div>
+  `).join('');
+
+  const undone = meals.filter(m=>!m.done);
+  const motiveLine = undone.length === 0
+    ? '🎉 Все приёмы пищи отмечены! Отличный день.'
+    : `Осталось ${undone.length} приём${undone.length>1?'а':''} пищи`;
+
+  c.innerHTML = `
+    <div class="today-hero">
+      <div>
+        <div class="hero-label">Ваш план на сегодня</div>
+        <div class="hero-title">${doneKcal} из ${goalKcal} ккал</div>
+        <div class="hero-sub">${motiveLine}</div>
+      </div>
+      <div class="progress-row">
+        <div class="progress-header">
+          <span class="progress-label">Калории</span>
+          <span class="progress-value">${pct}%</span>
+        </div>
+        <div class="progress-track"><div class="progress-fill ${fillClass}" id="kcal-bar" style="width:0%"></div></div>
+      </div>
+      <div class="macro-row">
+        <div class="macro-pill"><span class="macro-val" style="color:var(--c-accent)">${doneP}г</span><span class="macro-lab">Белки</span></div>
+        <div class="macro-pill"><span class="macro-val" style="color:var(--c-warn)">${doneF}г</span><span class="macro-lab">Жиры</span></div>
+        <div class="macro-pill"><span class="macro-val" style="color:var(--c-accent2)">${doneC}г</span><span class="macro-lab">Углеводы</span></div>
+      </div>
+    </div>
+
+    <div style="padding: 0 0 4px;">
+      <div style="font-size:11px;font-weight:700;text-transform:uppercase;letter-spacing:0.8px;color:var(--c-text-tertiary);margin-bottom:8px">Активность недели</div>
+      <div class="streak-row">${streakHTML}</div>
+    </div>
+
+    <div class="card">
+      <div class="section-header">
+        <span class="section-title">Приёмы пищи</span>
+        <span class="section-action" onclick="navigate('diary')">Дневник →</span>
+      </div>
+      ${mealsHTML}
+      <div class="add-meal-row" onclick="alert('+ Новый приём пищи')">
+        <div class="add-icon">+</div>
+        <span class="add-text">Добавить приём пищи</span>
+      </div>
+    </div>
+
+    ${undone.length === 0 ? `
+    <div class="motive-card">
+      <div class="motive-icon">🌱</div>
+      <div>
+        <div class="motive-title">День завершён!</div>
+        <div class="motive-body">Завтра план уже готов — загляните с утра, чтобы начать день правильно.</div>
+      </div>
+    </div>` : `
+    <div class="motive-card">
+      <div class="motive-icon">💡</div>
+      <div>
+        <div class="motive-title">Следующий шаг</div>
+        <div class="motive-body">Отметьте ${meals.filter(m=>!m.done)[0].name} после приёма — и дневная цель станет ближе.</div>
+      </div>
+    </div>`}
+  `;
+  setTimeout(() => {
+    const bar = document.getElementById('kcal-bar');
+    if(bar) bar.style.width = pct + '%';
+  }, 60);
+}
+
+function toggleMeal(i) {
+  meals[i].done = !meals[i].done;
+  renderToday();
+}
+
+function emptyTodayHTML() {
+  return `<div class="state-container">
+    <div style="width:72px;height:72px;background:var(--c-accent-light);border-radius:50%;display:flex;align-items:center;justify-content:center;font-size:36px">📋</div>
+    <div class="state-title">План не создан</div>
+    <div class="state-body">Составьте план питания на сегодня — это займёт меньше минуты.</div>
+    <button class="state-action" onclick="todayState='success';renderToday()">Создать план</button>
+  </div>`;
+}
+
+function skeletonHTML() {
+  return `
+    <div class="today-hero">
+      <div class="skeleton" style="height:16px;width:120px;margin-bottom:12px"></div>
+      <div class="skeleton" style="height:30px;width:220px;margin-bottom:8px"></div>
+      <div class="skeleton" style="height:14px;width:160px;margin-bottom:20px"></div>
+      <div class="skeleton" style="height:6px;width:100%;margin-bottom:16px"></div>
+      <div style="display:flex;gap:8px">
+        <div class="skeleton" style="height:56px;flex:1;border-radius:8px"></div>
+        <div class="skeleton" style="height:56px;flex:1;border-radius:8px"></div>
+        <div class="skeleton" style="height:56px;flex:1;border-radius:8px"></div>
+      </div>
+    </div>
+    <div class="card" style="overflow:hidden">
+      ${[1,2,3].map(()=>`<div style="display:flex;gap:16px;padding:16px 20px;border-bottom:0.5px solid var(--c-border)">
+        <div class="skeleton" style="width:40px;height:40px;border-radius:8px;flex-shrink:0"></div>
+        <div style="flex:1"><div class="skeleton" style="height:14px;width:60%;margin-bottom:8px"></div><div class="skeleton" style="height:11px;width:80%"></div></div>
+      </div>`).join('')}
+    </div>
+  `;
+}
+
+function errorHTML(title, body, retry) {
+  const id = 'err-' + Date.now();
+  setTimeout(() => {
+    const btn = document.getElementById(id);
+    if(btn) btn.onclick = retry;
+  }, 50);
+  return `<div class="state-container">
+    <div style="width:72px;height:72px;background:var(--c-danger-light);border-radius:50%;display:flex;align-items:center;justify-content:center;font-size:36px">⚠️</div>
+    <div class="state-title">${title}</div>
+    <div class="state-body">${body}</div>
+    <button class="state-action" id="${id}" style="background:var(--c-danger)">Повторить</button>
+  </div>`;
+}
+
+// simulate loading
+setTimeout(() => { todayState = 'success'; renderToday(); }, 1100);
+
+// ─── DIARY SCREEN ─────────────────────────────────────────────────
+const dayNames = ['Вс','Пн','Вт','Ср','Чт','Пт','Сб'];
+const monthNames = ['января','февраля','марта','апреля','мая','июня','июля','августа','сентября','октября','ноября','декабря'];
+
+function diaryNav(d) {
+  diaryOffset += d;
+  if(diaryOffset > 0) diaryOffset = 0;
+  renderDiary();
+}
+
+function renderDiary() {
+  const now = new Date();
+  now.setDate(now.getDate() + diaryOffset);
+  const label = `${dayNames[now.getDay()]}, ${now.getDate()} ${monthNames[now.getMonth()]}`;
+  document.getElementById('diary-day-label').textContent = label;
+  document.getElementById('diary-next-btn').style.visibility = diaryOffset < 0 ? 'visible' : 'hidden';
+  document.getElementById('tb-sub').textContent = label;
+
+  if(diaryOffset < -3) {
+    document.getElementById('diary-content').innerHTML = `<div class="state-container">
+      <div style="font-size:48px">📭</div>
+      <div class="state-title">Записей нет</div>
+      <div class="state-body">В этот день приёмы пищи не фиксировались.</div>
+    </div>`;
+    return;
+  }
+
+  const diaryMeals = [
+    { name:'Завтрак', kcal:320, items:[
+      { name:'Овсянка', grams:'150 г', kcal:148, macros:'Б5 / Ж3 / У27' },
+      { name:'Черника', grams:'80 г', kcal:46, macros:'Б0 / Ж0 / У11' },
+      { name:'Протеиновый йогурт', grams:'125 г', kcal:126, macros:'Б14 / Ж2 / У12' },
+    ]},
+    { name:'Обед', kcal:480, items:[
+      { name:'Куриная грудка', grams:'200 г', kcal:220, macros:'Б46 / Ж5 / У0' },
+      { name:'Бурый рис', grams:'120 г', kcal:174, macros:'Б4 / Ж1 / У37' },
+      { name:'Огурец', grams:'100 г', kcal:15, macros:'Б1 / Ж0 / У3' },
+      { name:'Оливковое масло', grams:'10 мл', kcal:90, macros:'Б0 / Ж10 / У0' },
+    ]},
+    { name:'Перекус', kcal:185, items:[
+      { name:'Яблоко', grams:'180 г', kcal:95, macros:'Б0 / Ж0 / У25' },
+      { name:'Миндаль', grams:'30 г', kcal:90, macros:'Б3 / Ж8 / У3' },
+    ]},
+  ];
+
+  const totalKcal = diaryMeals.reduce((s,m)=>s+m.kcal,0);
+  const goal = 2100;
+  const pct = Math.min(100, Math.round(totalKcal/goal*100));
+
+  const diaryHTML = diaryMeals.map(m => `
+    <div class="diary-entry">
+      <div class="diary-meal-header">
+        <span class="diary-meal-name">${m.name}</span>
+        <span class="diary-meal-kcal">${m.kcal} ккал</span>
+      </div>
+      ${m.items.map(f => `
+        <div class="diary-food-item">
+          <div>
+            <div class="diary-food-name">${f.name}</div>
+            <div class="diary-food-meta">${f.macros}</div>
+          </div>
+          <div class="diary-food-right">
+            <div class="diary-food-kcal">${f.kcal}</div>
+            <div class="diary-food-grams">${f.grams}</div>
+          </div>
+        </div>
+      `).join('')}
+    </div>
+  `).join('');
+
+  document.getElementById('diary-content').innerHTML = `
+    <div class="card card-pad">
+      <div style="display:flex;justify-content:space-between;align-items:baseline;margin-bottom:10px">
+        <span style="font-size:14px;color:var(--c-text-secondary)">Итого за день</span>
+        <span style="font-size:20px;font-weight:700;letter-spacing:-0.3px">${totalKcal} <span style="font-size:13px;font-weight:400;color:var(--c-text-secondary)">из ${goal} ккал</span></span>
+      </div>
+      <div class="progress-track"><div class="progress-fill" style="width:${pct}%"></div></div>
+      <div class="macro-row" style="margin-top:12px">
+        <div class="macro-pill"><span class="macro-val" style="color:var(--c-accent)">96г</span><span class="macro-lab">Белки</span></div>
+        <div class="macro-pill"><span class="macro-val" style="color:var(--c-warn)">27г</span><span class="macro-lab">Жиры</span></div>
+        <div class="macro-pill"><span class="macro-val" style="color:var(--c-accent2)">81г</span><span class="macro-lab">Углеводы</span></div>
+      </div>
+    </div>
+    ${diaryHTML}
+  `;
+}
+
+// ─── PANTRY SCREEN ────────────────────────────────────────────────
+const pantryItems = [
+  { name:'Куриная грудка', qty:'300 г', status:'low' },
+  { name:'Яйца', qty:'6 шт', status:'ok' },
+  { name:'Молоко', qty:'0 мл', status:'out' },
+  { name:'Овсянка', qty:'800 г', status:'ok' },
+  { name:'Оливковое масло', qty:'200 мл', status:'ok' },
+  { name:'Авокадо', qty:'0 шт', status:'out' },
+  { name:'Лосось', qty:'150 г', status:'low' },
+  { name:'Греческий йогурт', qty:'500 г', status:'ok' },
+  { name:'Брокколи', qty:'0 г', status:'out' },
+  { name:'Бурый рис', qty:'1.2 кг', status:'ok' },
+];
+const statusLabel = { ok:'Есть', low:'Заканчивается', out:'Нет' };
+
+function renderPantry() {
+  const out = pantryItems.filter(i=>i.status==='out');
+  const low = pantryItems.filter(i=>i.status==='low');
+  const ok = pantryItems.filter(i=>i.status==='ok');
+
+  function group(items, label) {
+    if(!items.length) return '';
+    return `<div><div class="pantry-cat">${label}</div>
+      <div class="card" style="overflow:hidden">${items.map(item=>`
+        <div class="pantry-item">
+          <div class="pantry-dot ${item.status}"></div>
+          <span class="pantry-name">${item.name}</span>
+          <span class="pantry-qty">${item.qty}</span>
+          <span class="pantry-badge ${item.status}">${statusLabel[item.status]}</span>
+        </div>
+      `).join('')}</div></div>`;
+  }
+
+  document.getElementById('pantry-content').innerHTML = `
+    <div class="search-bar">
+      <svg viewBox="0 0 20 20" fill="none" stroke="currentColor" stroke-width="1.5"><circle cx="9" cy="9" r="6"/><path d="M15 15l-3-3"/></svg>
+      <input class="search-input" placeholder="Поиск продуктов..." oninput="filterPantry(this.value)">
+    </div>
+    <div style="display:flex;gap:8px;margin-bottom:4px">
+      <div class="card card-pad" style="flex:1;text-align:center">
+        <div style="font-size:22px;font-weight:700;color:var(--c-danger)">${out.length}</div>
+        <div style="font-size:11px;color:var(--c-text-secondary);margin-top:2px">Нет в наличии</div>
+      </div>
+      <div class="card card-pad" style="flex:1;text-align:center">
+        <div style="font-size:22px;font-weight:700;color:var(--c-warn)">${low.length}</div>
+        <div style="font-size:11px;color:var(--c-text-secondary);margin-top:2px">Заканчивается</div>
+      </div>
+      <div class="card card-pad" style="flex:1;text-align:center">
+        <div style="font-size:22px;font-weight:700;color:var(--c-accent)">${ok.length}</div>
+        <div style="font-size:11px;color:var(--c-text-secondary);margin-top:2px">В наличии</div>
+      </div>
+    </div>
+    <div id="pantry-list">
+      ${group(out, 'Нет в наличии')}
+      ${group(low, 'Заканчивается')}
+      ${group(ok, 'В наличии')}
+    </div>
+  `;
+}
+
+function filterPantry(val) {
+  const lower = val.toLowerCase();
+  const filtered = pantryItems.filter(i=>i.name.toLowerCase().includes(lower));
+  const list = document.getElementById('pantry-list');
+  if(!list) return;
+  if(!filtered.length) { list.innerHTML = `<div class="state-container" style="padding:40px 0"><div style="font-size:36px">🔍</div><div class="state-title" style="font-size:16px">Не найдено</div></div>`; return; }
+  list.innerHTML = `<div class="card" style="overflow:hidden">${filtered.map(item=>`
+    <div class="pantry-item">
+      <div class="pantry-dot ${item.status}"></div>
+      <span class="pantry-name">${item.name}</span>
+      <span class="pantry-qty">${item.qty}</span>
+      <span class="pantry-badge ${item.status}">${statusLabel[item.status]}</span>
+    </div>
+  `).join('')}</div>`;
+}
+
+// ─── SHOPPING SCREEN ──────────────────────────────────────────────
+function renderShopping() {
+  const done = shopItems.filter(i=>i.done).length;
+  const total = shopItems.length;
+  const pct = Math.round(done/total*100);
+
+  const itemsHTML = shopItems.map(item => `
+    <div class="shop-item ${item.done?'checked':''}" onclick="toggleShop(${item.id})">
+      <div class="shop-check ${item.done?'done':''}"></div>
+      <span class="shop-name">${item.name}</span>
+      <span class="shop-qty">${item.qty}</span>
+      <button class="shop-del" onclick="event.stopPropagation();removeShop(${item.id})">×</button>
+    </div>
+  `).join('');
+
+  document.getElementById('shopping-content').innerHTML = `
+    <div class="card card-pad">
+      <div class="shop-progress">
+        <span>${done} из ${total} куплено</span>
+        <div class="shop-prog-fill"><div class="shop-prog-inner" id="shop-bar" style="width:0%"></div></div>
+        <span style="color:var(--c-accent);font-weight:700">${pct}%</span>
+      </div>
+    </div>
+
+    ${done === total && total > 0 ? `
+    <div class="motive-card">
+      <div class="motive-icon">✅</div>
+      <div>
+        <div class="motive-title">Список выполнен!</div>
+        <div class="motive-body">Все продукты куплены. Можно обновить список на следующую неделю.</div>
+      </div>
+    </div>` : ''}
+
+    <div>
+      <div class="pantry-cat">Нужно купить</div>
+      <div class="card" style="overflow:hidden">${itemsHTML}</div>
+    </div>
+
+    <button onclick="addShopItem()" style="width:100%;padding:14px;background:var(--c-surface);border:1.5px dashed var(--c-border-mid);border-radius:var(--r-lg);font-family:var(--font);font-size:15px;font-weight:600;color:var(--c-text-secondary);cursor:pointer;">
+      + Добавить позицию
+    </button>
+  `;
+  setTimeout(() => {
+    const bar = document.getElementById('shop-bar');
+    if(bar) bar.style.width = pct + '%';
+  }, 60);
+}
+
+function toggleShop(id) {
+  const item = shopItems.find(i=>i.id===id);
+  if(item) item.done = !item.done;
+  renderShopping();
+}
+function removeShop(id) {
+  shopItems = shopItems.filter(i=>i.id!==id);
+  renderShopping();
+}
+function addShopItem() {
+  const name = prompt('Название продукта:');
+  if(!name) return;
+  const qty = prompt('Количество:') || '1 шт';
+  shopItems.push({ id: Date.now(), name, qty, done:false });
+  renderShopping();
+}
+
+// ─── INIT ─────────────────────────────────────────────────────────
+renderToday();
+
+// Demo state cycling for showcase
+const stateDemo = document.createElement('div');
+stateDemo.style.cssText = 'position:fixed;top:8px;left:50%;transform:translateX(-50%);z-index:200;display:flex;gap:4px;';
+['loading','empty','error','success'].forEach(s => {
+  const b = document.createElement('button');
+  b.textContent = s;
+  b.style.cssText = 'padding:4px 10px;border-radius:20px;border:0.5px solid var(--c-border-mid);background:var(--c-surface);font-size:10px;font-weight:700;font-family:var(--font);cursor:pointer;color:var(--c-text-secondary);letter-spacing:0.4px;text-transform:uppercase';
+  b.onclick = () => {
+    if(currentScreen !== 'today') navigate('today');
+    todayState = s;
+    renderToday();
+    document.querySelectorAll('#state-bar button').forEach(x => x.style.color='var(--c-text-secondary)');
+    b.style.color = 'var(--c-accent)';
+  };
+  stateDemo.appendChild(b);
+});
+stateDemo.id = 'state-bar';
+document.getElementById('app').appendChild(stateDemo);
+
+// mark success as active
+stateDemo.querySelectorAll('button')[3].style.color='var(--c-accent)';
+</script>
+</body>
+</html>

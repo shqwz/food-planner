@@ -1,15 +1,15 @@
 import { useEffect, useState } from "react";
-import { GlassCard, SectionTitle, PillButton } from "../components/ui";
 import { apiGet } from "../api/client";
 
 export default function ShoppingTab({ showToast, userId }) {
   const [items, setItems] = useState([]);
+  const [error, setError] = useState("");
 
   useEffect(() => {
     apiGet("/api/shopping", { user_id: userId, days: 3 })
       .then((data) => setItems((data.items || []).map((item) => ({ ...item, checked: false })))
       )
-      .catch(() => {});
+      .catch((e) => setError(e.message));
   }, [userId]);
 
   const toggle = (i) => {
@@ -22,53 +22,64 @@ export default function ShoppingTab({ showToast, userId }) {
   const allDone    = remaining.length === 0;
 
   return (
-    <div className="animate-fade-up">
-      {/* Summary card */}
-      <GlassCard className="flex items-center justify-between">
-        <div>
-          <div className="text-[12px] font-bold" style={{ color: "var(--tg-muted)" }}>Осталось купить</div>
-          <div className="text-[24px] font-extrabold leading-tight" style={{ color: "var(--tg-text)" }}>
+    <div className="content">
+      <div className="card" style={{ padding: 16 }}>
+        <div style={{ display: "flex", alignItems: "center", justifyContent: "space-between" }}>
+          <div>
+            <div className="kpi">Осталось купить</div>
+            <div style={{ fontSize: 22, fontWeight: 700 }}>
             {allDone ? "Всё куплено! 🎉" : `${remaining.length} позиций`}
+            </div>
           </div>
-        </div>
-        <div className="text-right">
-          <div className="text-[12px] font-bold" style={{ color: "var(--tg-muted)" }}>Примерная сумма</div>
-          <div className="text-[24px] font-extrabold leading-tight" style={{ color: "#00d9a3" }}>
+          <div style={{ textAlign: "right" }}>
+            <div className="kpi">Сумма</div>
+            <div style={{ fontSize: 22, fontWeight: 700, color: "var(--c-accent)" }}>
             ~{totalPrice.toLocaleString("ru-RU")} ₽
+            </div>
           </div>
         </div>
-      </GlassCard>
+      </div>
+      {error && (
+        <div className="card" style={{ padding: 12, color: "var(--c-danger)" }}>
+          {error}
+        </div>
+      )}
 
-      {/* Remaining items */}
+      {items.length === 0 && !error && (
+        <div className="card" style={{ padding: 16 }}>
+          <div style={{ fontWeight: 700 }}>Корзина пока пуста</div>
+          <div className="muted">Сгенерируй план, чтобы получить список покупок.</div>
+        </div>
+      )}
+
       {remaining.length > 0 && (
         <>
-          <SectionTitle>Нужно купить</SectionTitle>
-          {remaining.map((item) => {
-            const idx = items.indexOf(item);
-            return <ShopItem key={idx} item={item} onToggle={() => toggle(idx)} />;
-          })}
+          <div className="section-title">Нужно купить</div>
+          <div className="card">
+            {remaining.map((item) => {
+              const idx = items.indexOf(item);
+              return <ShopItem key={idx} item={item} onToggle={() => toggle(idx)} />;
+            })}
+          </div>
         </>
       )}
 
-      {/* Bought items */}
       {bought.length > 0 && (
         <>
-          <SectionTitle>Уже куплено ✓</SectionTitle>
-          {bought.map((item) => {
-            const idx = items.indexOf(item);
-            return <ShopItem key={idx} item={item} onToggle={() => toggle(idx)} />;
-          })}
+          <div className="section-title">Уже куплено</div>
+          <div className="card">
+            {bought.map((item) => {
+              const idx = items.indexOf(item);
+              return <ShopItem key={idx} item={item} onToggle={() => toggle(idx)} />;
+            })}
+          </div>
         </>
       )}
 
-      <PillButton variant="outline" onClick={() => showToast("📤", "Список скопирован!")}>
-        📤 Поделиться списком
-      </PillButton>
+      <button className="pill-btn pill-btn-ghost" onClick={() => showToast("📤", "Список скопирован!")}>Поделиться списком</button>
 
       {allDone && (
-        <PillButton onClick={() => showToast("✅", "Корзина сброшена!")}>
-          🛒 Новая корзина
-        </PillButton>
+        <button className="pill-btn pill-btn-primary" onClick={() => showToast("✅", "Корзина сброшена!")}>Новая корзина</button>
       )}
     </div>
   );
@@ -76,44 +87,12 @@ export default function ShoppingTab({ showToast, userId }) {
 
 function ShopItem({ item, onToggle }) {
   return (
-    <div
-      onClick={onToggle}
-      className="flex items-center gap-3 px-4 py-3 rounded-xl mb-2 cursor-pointer transition-all active:scale-[0.97]"
-      style={{
-        background: item.checked ? "rgba(255,255,255,0.02)" : "var(--tg-surface)",
-        border: "1px solid var(--tg-border)",
-        opacity: item.checked ? 0.55 : 1,
-      }}
-    >
-      {/* Checkbox */}
-      <div
-        className="w-[22px] h-[22px] rounded-[7px] flex items-center justify-center flex-shrink-0 transition-all"
-        style={{
-          border: item.checked ? "none" : "2px solid var(--tg-border)",
-          background: item.checked ? "#00d9a3" : "transparent",
-        }}
-      >
-        {item.checked && <span className="text-[13px] font-bold text-white">✓</span>}
+    <div onClick={onToggle} className="list-item" style={{ opacity: item.checked ? 0.5 : 1 }}>
+      <div style={{ flex: 1 }}>
+        <div style={{ fontWeight: 600, textDecoration: item.checked ? "line-through" : "none" }}>{item.name}</div>
+        <div className="kpi">{item.amount_needed} {item.unit}</div>
       </div>
-
-      <span className="text-[20px]">🛒</span>
-
-      <div className="flex-1">
-        <div
-          className="text-[14px] font-bold"
-          style={{
-            color: "var(--tg-text)",
-            textDecoration: item.checked ? "line-through" : "none",
-          }}
-        >
-          {item.name}
-        </div>
-        <div className="text-[12px] mt-0.5" style={{ color: "var(--tg-muted)" }}>
-          {item.amount_needed} {item.unit}
-        </div>
-      </div>
-
-      <div className="text-[13px] font-bold flex-shrink-0" style={{ color: "var(--tg-muted)" }}>
+      <div className="kpi">
         {Math.round(item.estimated_cost)} ₽
       </div>
     </div>

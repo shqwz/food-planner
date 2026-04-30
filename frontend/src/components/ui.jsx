@@ -7,6 +7,7 @@ export function Card({ children, className = "", style = {}, onClick }) {
       style={{
         background: "var(--tg-surface)",
         border: "1px solid var(--tg-border)",
+        boxShadow: "var(--shadow-sm)",
         padding: "16px",
         ...style,
       }}
@@ -22,9 +23,10 @@ export function GlassCard({ children, className = "", style = {} }) {
     <div
       className={`rounded-2xl mb-3 ${className}`}
       style={{
-        background: "rgba(255,255,255,0.04)",
+        background: "color-mix(in srgb, var(--tg-surface) 82%, transparent 18%)",
         backdropFilter: "blur(12px)",
         border: "1px solid var(--tg-border)",
+        boxShadow: "var(--shadow-sm)",
         padding: "16px",
         ...style,
       }}
@@ -140,9 +142,7 @@ export function EmptyState({ icon = "🫙", title = "Пусто", desc = "", act
       <div className="text-[56px] mb-4" style={{ filter: "grayscale(20%)" }}>{icon}</div>
       <div className="text-[18px] font-extrabold mb-2" style={{ color: "var(--tg-text)" }}>{title}</div>
       {desc && <div className="text-[14px] leading-relaxed mb-5" style={{ color: "var(--tg-muted)", maxWidth: 240 }}>{desc}</div>}
-      {action && (
-        <button className="pill-btn btn-primary" onClick={action}>{actionLabel}</button>
-      )}
+      {action && <PillButton onClick={action}>{actionLabel}</PillButton>}
     </div>
   );
 }
@@ -195,6 +195,23 @@ export function MacroChip({ label, value, color }) {
     >
       {label} {value}
     </div>
+  );
+}
+
+export function Badge({ children, tone = "neutral" }) {
+  const tones = {
+    neutral: { bg: "var(--tg-surface2)", text: "var(--tg-muted)" },
+    success: { bg: "rgba(0,200,150,0.15)", text: "var(--success)" },
+    warn: { bg: "rgba(255,179,71,0.15)", text: "var(--warn)" },
+  };
+  const current = tones[tone] || tones.neutral;
+  return (
+    <span
+      className="px-2 py-1 rounded-full text-[11px] font-bold"
+      style={{ background: current.bg, color: current.text }}
+    >
+      {children}
+    </span>
   );
 }
 

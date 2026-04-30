@@ -1,5 +1,4 @@
 import { useEffect, useState } from "react";
-import { GlassCard, SectionTitle, MacroChip, PillButton } from "../components/ui";
 import { apiGet, apiPost } from "../api/client";
 
 export default function PlanTab({ showToast, userId }) {
@@ -34,135 +33,66 @@ export default function PlanTab({ showToast, userId }) {
     }
   };
 
-  if (loading) {
-    return <div className="text-sm" style={{ color: "var(--tg-muted)" }}>Загружаем план...</div>;
-  }
+  if (loading) return <div className="content"><div className="card" style={{ padding: 16 }}>Загружаем план...</div></div>;
 
   const daily = plan?.daily_totals || {};
   const meals = plan?.meals || [];
+  const nextMeal = meals[0];
 
   return (
-    <div className="animate-fade-up">
-      <GlassCard
-        style={{
-          background: "linear-gradient(135deg, rgba(108,99,255,0.15), rgba(0,217,163,0.08))",
-          borderColor: "rgba(108,99,255,0.25)",
-        }}
-      >
-        <div className="flex items-center gap-2.5 mb-3">
-          <span className="text-[26px]">🤖</span>
-          <div className="flex-1">
-            <div className="text-[16px] font-extrabold" style={{ color: "var(--tg-text)" }}>ИИ-план на сегодня</div>
-            <div className="text-[12px] mt-0.5" style={{ color: "var(--tg-muted)" }}>
-              {plan ? `${daily.kcal || 0} ккал` : "План не найден"}
-            </div>
-          </div>
-          <div
-            className="px-2.5 py-1 rounded-full text-[11px] font-bold"
-            style={{ background: "rgba(0,217,163,0.15)", color: "#00d9a3" }}
-          >
-            {plan ? "АКТИВЕН" : "ПУСТО"}
-          </div>
+    <div className="content">
+      <section className="today-hero">
+        <div className="hero-label">Ваш план на сегодня</div>
+        <div className="hero-title">{daily.kcal || 0} из 2100 ккал</div>
+        <div className="hero-sub">{nextMeal ? `Следующий прием: ${nextMeal.time || "--:--"}` : "План пока отсутствует"}</div>
+        <div className="progress-track">
+          <div className="progress-fill" style={{ width: `${Math.min(100, Math.round(((daily.kcal || 0) / 2100) * 100))}%` }} />
         </div>
-
-        <div className="grid grid-cols-4 gap-2">
+        <div className="macro-row">
           {[
-            { label: "Белки",   value: `${daily.protein || 0}г`, color: "#ff6584" },
-            { label: "Жиры",    value: `${daily.fat || 0}г`,     color: "#ffb347" },
-            { label: "Углев.",  value: `${daily.carbs || 0}г`,   color: "#6c63ff" },
-            { label: "Ккал",    value: daily.kcal || 0,          color: "#00d9a3" },
+            { label: "Белки", value: `${Math.round(daily.protein || 0)}г`, color: "var(--c-accent)" },
+            { label: "Жиры", value: `${Math.round(daily.fat || 0)}г`, color: "var(--c-warn)" },
+            { label: "Углеводы", value: `${Math.round(daily.carbs || 0)}г`, color: "var(--c-accent2)" },
           ].map((m) => (
-            <div
-              key={m.label}
-              className="rounded-[10px] py-2.5 text-center"
-              style={{ background: "var(--tg-surface)" }}
-            >
-              <div className="text-[16px] font-extrabold leading-none" style={{ color: m.color }}>{m.value}</div>
-              <div className="text-[10px] font-bold mt-1" style={{ color: "var(--tg-muted)" }}>{m.label}</div>
+            <div className="macro-pill" key={m.label}>
+              <div className="macro-val" style={{ color: m.color }}>{m.value}</div>
+              <div className="macro-lab">{m.label}</div>
             </div>
           ))}
         </div>
-      </GlassCard>
+      </section>
 
-      {error && <div className="text-sm mb-2" style={{ color: "#ff6584" }}>{error}</div>}
-      <SectionTitle>Приёмы пищи</SectionTitle>
+      {error && <div className="card" style={{ padding: 14, color: "var(--c-danger)" }}>{error}</div>}
+      <div className="section-title">Приемы пищи</div>
 
-      {meals.map((meal, idx) => (
-        <MealCard key={`${meal.type}-${idx}`} meal={meal} showToast={showToast} />
-      ))}
+      {meals.length === 0 ? (
+        <div className="card" style={{ padding: 16 }}>
+          <div style={{ fontWeight: 700 }}>План на сегодня пока пуст</div>
+          <div className="muted">Сгенерируй рацион, чтобы получить расписание и контроль КБЖУ.</div>
+        </div>
+      ) : (
+        <div className="card">
+          {meals.map((meal, idx) => <MealRow key={`${meal.type}-${idx}`} meal={meal} showToast={showToast} />)}
+        </div>
+      )}
 
-      <PillButton variant="outline" onClick={generate}>
-        🔄 Перегенерировать план
-      </PillButton>
+      <button className="pill-btn pill-btn-primary" onClick={generate}>
+        {plan ? "Обновить план" : "Сгенерировать план"}
+      </button>
     </div>
   );
 }
 
-function MealCard({ meal, showToast }) {
-  const mealColor = "#6c63ff";
+function MealRow({ meal, showToast }) {
   return (
-    <div
-      className="rounded-[20px] overflow-hidden mb-3"
-      style={{ background: "var(--tg-surface)", border: "1px solid var(--tg-border)" }}
-    >
-      {/* Coloured top stripe */}
-      <div className="h-[3px]" style={{ background: mealColor }} />
-
-      {/* Header */}
-      <div className="flex items-center justify-between px-4 py-3.5">
-        <div className="flex items-center gap-2.5">
-          <span className="text-[22px]">🍽️</span>
-          <div>
-            <div className="text-[16px] font-extrabold" style={{ color: "var(--tg-text)" }}>{meal.dish_name || meal.type}</div>
-            <div className="text-[12px] font-semibold" style={{ color: "var(--tg-muted)" }}>{meal.time}</div>
-          </div>
-        </div>
-        <div className="text-right">
-          <div className="text-[20px] font-extrabold leading-none" style={{ color: mealColor }}>{meal.total_kcal || 0}</div>
-          <div className="text-[11px] mt-0.5" style={{ color: "var(--tg-muted)" }}>ккал</div>
-        </div>
+    <div className="list-item">
+      <div style={{ flex: 1 }}>
+        <div style={{ fontSize: 15, fontWeight: 600 }}>{meal.dish_name || meal.type}</div>
+        <div className="kpi">{meal.time} · {meal.total_kcal || 0} ккал</div>
       </div>
-
-      {/* Divider */}
-      <div style={{ height: 1, background: "var(--tg-border)", margin: "0 16px" }} />
-
-      {/* Items */}
-      <div className="px-4 py-3 flex flex-col gap-1.5">
-        {(meal.ingredients || []).map((item, i) => (
-          <div key={i} className="flex items-center justify-between text-[13px]">
-            <div className="flex items-center gap-1.5 font-semibold" style={{ color: "var(--tg-text)" }}>
-              {item.name}
-            </div>
-            <div
-              className="px-2 py-0.5 rounded-lg text-[11px] font-bold"
-              style={{ background: "rgba(255,255,255,0.06)", color: "var(--tg-muted)" }}
-            >
-              {item.amount} {item.unit}
-            </div>
-          </div>
-        ))}
-      </div>
-
-      {/* Divider */}
-      <div style={{ height: 1, background: "var(--tg-border)", margin: "0 16px" }} />
-
-      {/* Footer macros */}
-      <div className="flex items-center gap-2 px-4 py-3 overflow-x-auto">
-        <MacroChip label="Б" value={`${meal.total_protein || 0}г`} color="#ff6584" />
-        <MacroChip label="Ж" value={`${meal.total_fat || 0}г`}    color="#ffb347" />
-        <MacroChip label="У" value={`${meal.total_carbs || 0}г`}  color="#6c63ff" />
-        <button
-          onClick={() => showToast("✅", "Отмечено как съеденное!")}
-          className="ml-auto px-3 py-1.5 rounded-full text-[12px] font-bold cursor-pointer border transition-all active:scale-95"
-          style={{
-            background: "rgba(0,217,163,0.12)",
-            borderColor: "rgba(0,217,163,0.3)",
-            color: "#00d9a3",
-          }}
-        >
-          ✓ Съел
-        </button>
-      </div>
+      <button className="pill-btn pill-btn-ghost" style={{ width: "auto", padding: "7px 10px" }} onClick={() => showToast("✅", "Отмечено")}>
+        ✓
+      </button>
     </div>
   );
 }

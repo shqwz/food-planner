@@ -1,5 +1,4 @@
 import { useEffect, useMemo, useState } from "react";
-import { PillButton, SkeletonList, EmptyState } from "../components/ui";
 import { apiGet } from "../api/client";
 
 export default function PantryTab({ showToast, userId }) {
@@ -29,50 +28,50 @@ export default function PantryTab({ showToast, userId }) {
     [products, query]
   );
 
-  if (loading) return <SkeletonList count={6} />;
+  if (loading) return <div className="content"><div className="card" style={{ padding: 16 }}>Загружаем кладовую...</div></div>;
 
   return (
-    <div className="animate-fade-up">
-      {/* Search */}
-      <div
-        className="flex items-center gap-2.5 rounded-xl px-3.5 py-2.5 mb-4"
-        style={{ background: "var(--tg-surface)", border: "1px solid var(--tg-border)" }}
-      >
-        <span className="text-[16px]">🔍</span>
+    <div className="content">
+      <div className="section-title">Запасы на сегодня</div>
+      <div className="card" style={{ padding: 10, display: "flex", gap: 10, alignItems: "center" }}>
+        <span className="muted">⌕</span>
         <input
           type="text"
           placeholder="Поиск продуктов..."
           value={query}
           onChange={(e) => setQuery(e.target.value)}
-          className="flex-1 bg-transparent outline-none text-[14px] font-semibold placeholder-[var(--tg-muted)]"
-          style={{ color: "var(--tg-text)", fontFamily: "inherit", border: "none" }}
+          style={{ flex: 1, background: "transparent", border: "none", outline: "none", color: "var(--c-text-primary)" }}
         />
         {query && (
-          <button onClick={() => setQuery("")} className="text-[14px] cursor-pointer" style={{ color: "var(--tg-muted)", background: "none", border: "none" }}>✕</button>
+          <button onClick={() => setQuery("")} style={{ color: "var(--c-text-tertiary)", background: "none", border: "none" }}>✕</button>
         )}
       </div>
 
-      {error && <div className="text-sm mb-3" style={{ color: "#ff6584" }}>{error}</div>}
+      {error && (
+        <div className="card" style={{ padding: 12, color: "var(--c-danger)" }}>
+          {error}
+        </div>
+      )}
       {filtered.length === 0 ? (
-        <EmptyState
-          icon="🔍"
-          title="Ничего не найдено"
-          desc="Попробуйте изменить запрос или категорию"
-        />
+        <div className="card" style={{ padding: 16 }}>
+          <div style={{ fontWeight: 700 }}>Ничего не найдено</div>
+          <div className="muted">Попробуйте изменить запрос.</div>
+        </div>
       ) : (
-        filtered.map((p) => (
-          <div key={p.id} className="rounded-2xl px-4 py-3 mb-2" style={{ background: "var(--tg-surface)", border: "1px solid var(--tg-border)" }}>
-            <div className="text-[14px] font-bold" style={{ color: "var(--tg-text)" }}>{p.name}</div>
-            <div className="text-[12px]" style={{ color: "var(--tg-muted)" }}>
-              {p.amount} {p.unit} · {p.calories_per_100} ккал/100
+        <div className="card">
+          {filtered.map((p) => (
+            <div key={p.id} className="list-item">
+              <div style={{ flex: 1 }}>
+                <div style={{ fontWeight: 600 }}>{p.name}</div>
+                <div className="kpi">{p.amount} {p.unit} · {p.calories_per_100} ккал/100</div>
+              </div>
+              <span className="badge">{Number(p.amount) > 200 ? "Есть" : "Мало"}</span>
             </div>
-          </div>
-        ))
+          ))}
+        </div>
       )}
 
-      <PillButton onClick={() => showToast("ℹ️", "Добавление через API будет следующим шагом")}>
-        ➕ Добавить продукт (скоро)
-      </PillButton>
+      <button className="pill-btn pill-btn-ghost" onClick={() => showToast("ℹ️", "Добавление через API будет следующим шагом")}>Добавить продукт</button>
     </div>
   );
 }

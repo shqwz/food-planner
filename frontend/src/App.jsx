@@ -1,48 +1,58 @@
-import { useMemo, useState } from "react";
+import { useEffect, useMemo, useState } from "react";
 import PantryTab from "./tabs/PantryTab";
 import PlanTab from "./tabs/PlanTab";
 import DiaryTab from "./tabs/DiaryTab";
 import ShoppingTab from "./tabs/ShoppingTab";
 import BottomNav from "./components/BottomNav";
-import Toast from "./components/ui";
+import { getTelegramColorScheme, initTelegramWebApp } from "./lib/telegram";
+
+const THEME_KEY = "food-planner-theme";
 
 export default function App() {
-  const [user] = useState({ name: "Алексей", avatar: "🧑‍🍳", telegramId: 123456789 });
-  const [activeTab, setActiveTab] = useState("pantry");
-  const [toast, setToast] = useState(null);
+  const [user] = useState({ name: "Алексей", avatar: "AP", telegramId: 123456789 });
+  const [activeTab, setActiveTab] = useState("plan");
+  const [themeMode, setThemeMode] = useState(() => localStorage.getItem(THEME_KEY) || "system");
 
   const todayFormatted = useMemo(() => new Date().toLocaleDateString("ru-RU", {
     weekday: "long", day: "numeric", month: "long", year: "numeric",
   }), []).replace(/^./, (ch) => ch.toUpperCase());
 
-  const showToast = (icon, text) => {
-    setToast({ icon, text });
-    setTimeout(() => setToast(null), 1800);
-  };
+  useEffect(() => {
+    initTelegramWebApp();
+  }, []);
+
+  useEffect(() => {
+    const effectiveTheme = themeMode === "system" ? getTelegramColorScheme() : themeMode;
+    document.documentElement.setAttribute("data-theme", effectiveTheme);
+    localStorage.setItem(THEME_KEY, themeMode);
+  }, [themeMode]);
+
+  const showToast = () => {};
 
   const commonProps = { showToast, userId: user.telegramId };
+  const nextThemeMode = () => {
+    if (themeMode === "system") return "dark";
+    if (themeMode === "dark") return "light";
+    return "system";
+  };
+  const themeLabel = themeMode === "system" ? "⦿" : themeMode === "dark" ? "◐" : "◯";
 
   return (
-    <div className="relative flex flex-col min-h-screen overflow-hidden max-w-md mx-auto"
-      style={{ background: "var(--tg-bg)" }}
-    >
-      <header className="flex items-center justify-between px-5 pb-4 pt-14">
+    <div className="app">
+      <header className="topbar">
         <div>
-          <h2 className="text-[22px] font-extrabold" style={{ color: "var(--tg-text)" }}>
-            Привет, {user.name}!
-          </h2>
-          <p className="text-[13px]" style={{ color: "var(--tg-muted)" }}>{todayFormatted}</p>
-          <p className="text-[12px] font-bold mt-1" style={{ color: "var(--tg-accent)" }}>
-            Food Planner Mini App
-          </p>
+          <div className="topbar-title">
+            {activeTab === "plan" ? "Сегодня" : activeTab === "diary" ? "Дневник" : activeTab === "pantry" ? "Кладовая" : "Список покупок"}
+          </div>
+          <div className="topbar-sub">{todayFormatted}</div>
         </div>
-        <div className="w-11 h-11 rounded-full flex items-center justify-center text-[20px]"
-          style={{ background: "linear-gradient(135deg, #6c63ff, #00d9a3)" }}>
-          {user.avatar}
+        <div className="topbar-actions">
+          <button className="icon-btn" onClick={() => setThemeMode(nextThemeMode())}>{themeLabel}</button>
+          <button className="icon-btn">{user.avatar}</button>
         </div>
       </header>
 
-      <main className="px-4 pb-28">
+      <main>
         {activeTab === "pantry" && <PantryTab {...commonProps} />}
         {activeTab === "plan" && <PlanTab {...commonProps} />}
         {activeTab === "diary" && <DiaryTab {...commonProps} />}
@@ -50,7 +60,6 @@ export default function App() {
       </main>
 
       <BottomNav activeTab={activeTab} onSwitch={setActiveTab} />
-      {toast && <Toast icon={toast.icon} text={toast.text} />}
     </div>
   );
 }
