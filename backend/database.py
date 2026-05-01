@@ -23,8 +23,26 @@ def init_db():
     # Выполняем все запросы
     cursor.executescript(schema)
     conn.commit()
+    ensure_schema_migrations(conn)
+    conn.commit()
     conn.close()
     print("✅ База данных инициализирована")
+
+
+def ensure_schema_migrations(conn=None):
+    """Для уже существующих БД: добавляет столбцы, которых не было в старых schema."""
+    close = False
+    if conn is None:
+        conn = get_db()
+        close = True
+    try:
+        cols = {row[1] for row in conn.execute("PRAGMA table_info(consumed_meals)").fetchall()}
+        if cols and "entry_source" not in cols:
+            conn.execute("ALTER TABLE consumed_meals ADD COLUMN entry_source TEXT DEFAULT 'other'")
+    finally:
+        if close:
+            conn.commit()
+            conn.close()
 
 def seed_products():
     """Заполняет справочник продуктов базовыми значениями (твой список)"""

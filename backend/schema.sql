@@ -99,8 +99,9 @@ CREATE TABLE IF NOT EXISTS consumed_meals (
     total_fat REAL,
     total_carbs REAL,
     total_cost REAL,
-    was_planned BOOLEAN DEFAULT 0,    -- 1 если по плану, 0 если замена/ручной ввод
+    was_planned BOOLEAN DEFAULT 0,    -- 1 если по плану / чуть больше плана (те же продукты), 0 если вне плана
     original_plan_id INTEGER,         -- ссылка на meal_plan.id, если был по плану
+    entry_source TEXT DEFAULT 'other', -- plan | plan_over | other
     notes TEXT,
     FOREIGN KEY (user_id) REFERENCES users(id)
 );

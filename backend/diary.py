@@ -7,6 +7,42 @@ from services import resolve_user_id, find_product_id, NotFoundError
 diary_bp = Blueprint("diary", __name__)
 
 
+def _aggregate_meal_totals(ingredients: list, meal_totals_fallback: dict | None) -> dict:
+    """Суммы по строкам ингредиентов; если все нули — берём переданный снимок блюда (как из плана)."""
+    meal_totals_fallback = meal_totals_fallback or {}
+    kcal = sum(float(i.get("kcal") or 0) for i in ingredients)
+    protein = sum(float(i.get("protein") or 0) for i in ingredients)
+    fat = sum(float(i.get("fat") or 0) for i in ingredients)
+    carbs = sum(float(i.get("carbs") or 0) for i in ingredients)
+    cost = sum(float(i.get("cost") or 0) for i in ingredients)
+    if kcal > 0 or protein > 0 or fat > 0 or carbs > 0:
+        return {
+            "kcal": kcal,
+            "protein": protein,
+            "fat": fat,
+            "carbs": carbs,
+            "cost": cost,
+        }
+    return {
+        "kcal": float(meal_totals_fallback.get("kcal") or 0),
+        "protein": float(meal_totals_fallback.get("protein") or 0),
+        "fat": float(meal_totals_fallback.get("fat") or 0),
+        "carbs": float(meal_totals_fallback.get("carbs") or 0),
+        "cost": float(
+            meal_totals_fallback.get("cost")
+            if meal_totals_fallback.get("cost") is not None
+            else meal_totals_fallback.get("estimated_cost")
+            or 0
+        ),
+    }
+
+
+def _normalize_entry_source(value, was_planned: bool) -> str:
+    if value in ("plan", "plan_over", "other"):
+        return value
+    return "plan" if was_planned else "other"
+
+
 @diary_bp.route("/api/diary", methods=["GET"])
 def get_diary():
     """Получить дневник за конкретную дату"""
@@ -47,6 +83,7 @@ def get_diary():
                 "cost": m["total_cost"]
             },
             "was_planned": bool(m["was_planned"]),
+            "entry_source": m["entry_source"] if m["entry_source"] else "other",
             "notes": m["notes"]
         })
         totals["kcal"] += m["total_kcal"] or 0
@@ -68,8 +105,12 @@ def add_meal():
     meal_type = data.get("meal_type", "snack")
     dish_name = data.get("dish_name", "Без названия")
     ingredients = data.get("ingredients", [])
-    was_planned = data.get("was_planned", False)
-    notes = data.get("notes", "")
+    was_planned = bool(data.get("was_planned", False))
+    notes = data.get("notes", "").strip()
+    meal_totals_fb = data.get("meal_totals") or data.get("totals")
+
+    raw_entry_source = data.get("entry_source")
+    entry_source = _normalize_entry_source(raw_entry_source, was_planned)
 
     if not user_id or not ingredients:
         return jsonify({"error": "user_id и ingredients обязательны"}), 400
@@ -81,12 +122,12 @@ def add_meal():
         conn.close()
         return jsonify({"error": str(e)}), 404
 
-    # Считаем итоги
-    total_kcal = sum(i.get("kcal", 0) for i in ingredients)
-    total_protein = sum(i.get("protein", 0) for i in ingredients)
-    total_fat = sum(i.get("fat", 0) for i in ingredients)
-    total_carbs = sum(i.get("carbs", 0) for i in ingredients)
-    total_cost = sum(i.get("cost", 0) for i in ingredients)
+    totals_agg = _aggregate_meal_totals(ingredients, meal_totals_fb)
+    total_kcal = totals_agg["kcal"]
+    total_protein = totals_agg["protein"]
+    total_fat = totals_agg["fat"]
+    total_carbs = totals_agg["carbs"]
+    total_cost = totals_agg["cost"]
 
     # Если приём по плану — списываем продукты из кладовой и снимаем резерв
     if was_planned:
@@ -111,13 +152,13 @@ def add_meal():
     conn.execute('''
         INSERT INTO consumed_meals
         (user_id, consumed_at, plan_date, meal_type, dish_name, ingredients_json,
-         total_kcal, total_protein, total_fat, total_carbs, total_cost, was_planned, notes)
-        VALUES (?, datetime('now'), ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
+         total_kcal, total_protein, total_fat, total_carbs, total_cost, was_planned, entry_source, notes)
+        VALUES (?, datetime('now'), ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
     ''', (
         internal_user_id, plan_date, meal_type, dish_name,
         json.dumps(ingredients, ensure_ascii=False),
         total_kcal, total_protein, total_fat, total_carbs, total_cost,
-        int(was_planned), notes
+        int(was_planned), entry_source, notes
     ))
 
     conn.commit()

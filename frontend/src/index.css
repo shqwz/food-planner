@@ -65,7 +65,10 @@ body {
   top: 0;
   z-index: 50;
   background: var(--c-surface);
-  border-bottom: 0.5px solid var(--c-border);
+  border: 0.5px solid var(--c-border);
+  border-top: none;
+  border-radius: 0 0 var(--r-lg) var(--r-lg);
+  box-shadow: var(--shadow-sm);
   padding: 12px 16px;
   display: flex;
   align-items: center;
@@ -140,6 +143,148 @@ body {
   letter-spacing: 0.8px;
   color: var(--c-text-tertiary);
 }
+.section-lead {
+  font-size: 13px;
+  line-height: 1.45;
+  color: var(--c-text-secondary);
+  font-weight: 500;
+  margin: -4px 0 4px;
+  padding: 0 2px;
+}
+.planned-meal-slot {
+  padding: 14px 16px;
+  display: flex;
+  flex-direction: column;
+  gap: 8px;
+}
+.planned-meal-slot-top {
+  display: flex;
+  align-items: baseline;
+  justify-content: space-between;
+  gap: 10px;
+}
+.planned-meal-type {
+  font-size: 11px;
+  font-weight: 700;
+  text-transform: uppercase;
+  letter-spacing: 0.06em;
+  color: var(--c-accent);
+}
+.planned-meal-time {
+  font-size: 13px;
+  font-weight: 600;
+  color: var(--c-text-secondary);
+  font-variant-numeric: tabular-nums;
+}
+.planned-meal-dish {
+  font-size: 16px;
+  font-weight: 700;
+  letter-spacing: -0.25px;
+  line-height: 1.25;
+  color: var(--c-text-primary);
+}
+.planned-meal-meta {
+  font-size: 13px;
+  color: var(--c-text-secondary);
+  font-weight: 500;
+}
+.planned-meal-cta {
+  margin-top: 4px;
+}
+.planned-meal-cta--secondary {
+  margin-top: 6px;
+}
+.planned-meal-slot--logged {
+  box-shadow: inset 3px 0 0 var(--c-accent);
+}
+.planned-meal-logged-block {
+  display: flex;
+  flex-direction: column;
+  gap: 6px;
+  margin-top: 2px;
+}
+.planned-meal-done-row {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  gap: 8px 10px;
+}
+.planned-meal-done-badge {
+  font-size: 11px;
+  font-weight: 700;
+  text-transform: uppercase;
+  letter-spacing: 0.06em;
+  padding: 4px 10px;
+  border-radius: 20px;
+  background: var(--c-accent-light);
+  color: var(--c-accent);
+}
+.planned-meal-done-kcal {
+  font-size: 14px;
+  font-weight: 700;
+  color: var(--c-text-primary);
+}
+.planned-meal-done-source {
+  font-size: 12px;
+  color: var(--c-text-secondary);
+  font-weight: 500;
+}
+.plan-missing-hint {
+  border-style: dashed;
+}
+.diary-history-bar {
+  margin-top: 4px;
+}
+.diary-history-toggle {
+  width: 100%;
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 12px;
+  padding: 12px 14px;
+  border-radius: var(--r-md);
+  border: 1px solid var(--c-border-mid);
+  background: var(--c-surface2);
+  color: var(--c-text-primary);
+  font-family: var(--font);
+  font-size: 15px;
+  font-weight: 600;
+  cursor: pointer;
+  transition: border-color 0.15s ease, background 0.15s ease;
+}
+.diary-history-toggle:hover {
+  border-color: var(--c-accent);
+}
+.diary-history-toggle-label {
+  flex: 1;
+  text-align: left;
+}
+.diary-history-toggle-count {
+  font-size: 13px;
+  font-weight: 700;
+  color: var(--c-text-secondary);
+  min-width: 1.5rem;
+  text-align: center;
+  padding: 2px 8px;
+  border-radius: 10px;
+  background: var(--c-surface);
+}
+.diary-history-toggle-chevron {
+  font-size: 12px;
+  color: var(--c-text-tertiary);
+  width: 1.25rem;
+  text-align: center;
+}
+.diary-history-panel {
+  display: flex;
+  flex-direction: column;
+  gap: 10px;
+  margin-top: 10px;
+}
+.diary-extra-btn {
+  margin-top: 0;
+}
+
 
 .list-item {
   display: flex;
@@ -206,4 +351,456 @@ body {
   border-radius: 20px;
   background: var(--c-accent-light);
   color: var(--c-accent);
+}
+
+/* Diary add-meal modal */
+.modal-backdrop {
+  position: fixed;
+  inset: 0;
+  z-index: 200;
+  background: rgba(24, 24, 18, 0.48);
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  padding: 20px max(16px, env(safe-area-inset-right)) 24px max(16px, env(safe-area-inset-left));
+}
+.modal-dialog {
+  width: 100%;
+  max-width: 380px;
+  max-height: min(86vh, 580px);
+  background: var(--c-surface);
+  border-radius: var(--r-xl);
+  border: 0.5px solid var(--c-border);
+  box-shadow:
+    0 4px 24px rgba(0, 0, 0, 0.12),
+    0 12px 48px rgba(0, 0, 0, 0.08);
+  display: flex;
+  flex-direction: column;
+}
+.modal-head {
+  display: flex;
+  align-items: flex-start;
+  justify-content: space-between;
+  gap: 14px;
+  padding: 18px 18px 12px;
+  flex-shrink: 0;
+}
+.modal-head-text {
+  flex: 1;
+  min-width: 0;
+}
+.modal-title {
+  font-size: 17px;
+  font-weight: 700;
+  letter-spacing: -0.35px;
+  line-height: 1.3;
+}
+.modal-subtitle {
+  margin-top: 6px;
+  font-size: 13px;
+  line-height: 1.4;
+  color: var(--c-text-secondary);
+  font-weight: 500;
+}
+.modal-close {
+  border: none;
+  background: var(--c-surface2);
+  color: var(--c-text-secondary);
+  width: 36px;
+  height: 36px;
+  border-radius: var(--r-md);
+  font-size: 22px;
+  line-height: 1;
+  cursor: pointer;
+  font-family: var(--font);
+  flex-shrink: 0;
+}
+.modal-close:active {
+  opacity: 0.85;
+}
+.modal-body {
+  padding: 0 18px 18px;
+  padding-bottom: calc(18px + var(--c-safe-bottom));
+  overflow-y: auto;
+  flex: 1;
+  min-height: 0;
+}
+.modal-loading {
+  padding: 32px 8px;
+  text-align: center;
+  font-size: 14px;
+  color: var(--c-text-secondary);
+  font-weight: 500;
+}
+.modal-option-list {
+  display: flex;
+  flex-direction: column;
+  gap: 12px;
+}
+.modal-option-card {
+  width: 100%;
+  padding: 16px;
+  margin: 0;
+  border: 1px solid var(--c-border-mid);
+  border-radius: var(--r-lg);
+  background: var(--c-surface2);
+  text-align: left;
+  cursor: pointer;
+  font-family: var(--font);
+  display: flex;
+  flex-direction: column;
+  align-items: flex-start;
+  gap: 6px;
+  transition: border-color 0.15s ease, box-shadow 0.15s ease, transform 0.12s ease;
+}
+.modal-option-card:hover {
+  border-color: var(--c-accent);
+}
+.modal-option-card:active {
+  transform: scale(0.988);
+}
+.modal-option-card:focus {
+  outline: none;
+  border-color: var(--c-accent);
+  box-shadow: 0 0 0 3px var(--c-accent-light);
+}
+.modal-option-card:disabled {
+  opacity: 0.55;
+  cursor: not-allowed;
+  pointer-events: none;
+}
+.modal-inline-loading {
+  font-size: 13px;
+  font-weight: 600;
+  color: var(--c-accent);
+  text-align: center;
+  padding: 4px 0 2px;
+}
+.modal-option-card--accent {
+  border-color: var(--c-accent);
+  background: var(--c-accent-light);
+}
+.modal-option-title {
+  font-size: 16px;
+  font-weight: 700;
+  letter-spacing: -0.25px;
+  color: var(--c-text-primary);
+  line-height: 1.25;
+}
+.modal-option-desc {
+  font-size: 13px;
+  line-height: 1.42;
+  color: var(--c-text-secondary);
+  font-weight: 500;
+}
+.modal-stack {
+  display: flex;
+  flex-direction: column;
+  gap: 18px;
+}
+.modal-stack-submit {
+  margin-top: 0;
+}
+.modal-stack-secondary {
+  margin-top: -6px;
+}
+.modal-range-strong {
+  color: var(--c-accent);
+  font-weight: 700;
+}
+.field-label--readable {
+  text-transform: none;
+  letter-spacing: 0.01em;
+  font-size: 14px;
+  font-weight: 600;
+  line-height: 1.35;
+}
+.preview-dish-title {
+  font-size: 16px;
+  font-weight: 700;
+  letter-spacing: -0.25px;
+  line-height: 1.25;
+}
+.preview-footnote {
+  font-size: 12px;
+  line-height: 1.45;
+  color: var(--c-text-secondary);
+  font-weight: 500;
+  margin-top: -8px;
+  padding-bottom: 2px;
+}
+.preview-totals--tight {
+  margin-top: 0;
+}
+.modal-stack .field-group,
+.modal-stack .preview-totals,
+.modal-stack .analyze-list,
+.modal-stack .preview-dish-title {
+  margin: 0;
+}
+.field-group {
+  margin-bottom: 0;
+  display: flex;
+  flex-direction: column;
+  gap: 8px;
+}
+.field-label {
+  display: block;
+  font-size: 12px;
+  font-weight: 600;
+  text-transform: uppercase;
+  letter-spacing: 0.04em;
+  color: var(--c-text-secondary);
+  margin: 0;
+}
+.field-label strong {
+  text-transform: none;
+  letter-spacing: normal;
+  color: var(--c-accent);
+  font-weight: 700;
+}
+.modal-select-wrap {
+  position: relative;
+}
+.modal-select-wrap::after {
+  content: "";
+  position: absolute;
+  right: 14px;
+  top: 50%;
+  transform: translateY(-62%) rotate(45deg);
+  width: 10px;
+  height: 10px;
+  pointer-events: none;
+  border-right: 2px solid var(--c-text-secondary);
+  border-bottom: 2px solid var(--c-text-secondary);
+  opacity: 0.85;
+}
+.modal-select {
+  display: block;
+  width: 100%;
+  min-height: 48px;
+  padding: 12px 40px 12px 14px;
+  border-radius: var(--r-md);
+  border: 1px solid var(--c-border-mid);
+  background: var(--c-surface2);
+  color: var(--c-text-primary);
+  font-family: var(--font);
+  font-size: 15px;
+  font-weight: 500;
+  line-height: 1.35;
+  cursor: pointer;
+  appearance: none;
+  -webkit-appearance: none;
+  transition: border-color 0.15s ease, box-shadow 0.15s ease;
+}
+.modal-select:hover {
+  border-color: var(--c-accent);
+}
+.modal-select:focus {
+  outline: none;
+  border-color: var(--c-accent);
+  box-shadow: 0 0 0 3px var(--c-accent-light);
+}
+.modal-range {
+  width: 100%;
+  margin-top: 2px;
+  height: 8px;
+  accent-color: var(--c-accent);
+  border-radius: 4px;
+}
+.modal-textarea {
+  width: 100%;
+  min-height: 120px;
+  padding: 14px;
+  border-radius: var(--r-md);
+  border: 1px solid var(--c-border-mid);
+  font-family: var(--font);
+  font-size: 15px;
+  line-height: 1.45;
+  background: var(--c-surface2);
+  color: var(--c-text-primary);
+  resize: vertical;
+  transition: border-color 0.15s ease, box-shadow 0.15s ease;
+}
+.modal-textarea::placeholder {
+  color: var(--c-text-tertiary);
+}
+.modal-textarea:hover {
+  border-color: var(--c-border-mid);
+}
+.modal-textarea:focus {
+  outline: none;
+  border-color: var(--c-accent);
+  box-shadow: 0 0 0 3px var(--c-accent-light);
+}
+.preview-totals {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 8px 12px;
+  margin-top: 0;
+  padding: 12px 14px;
+  border-radius: var(--r-md);
+  background: var(--c-surface2);
+  border: 0.5px solid var(--c-border);
+  font-size: 13px;
+  font-weight: 600;
+}
+.analyze-list {
+  list-style: none;
+  font-size: 14px;
+  display: flex;
+  flex-direction: column;
+  gap: 8px;
+  padding: 12px 14px;
+  border-radius: var(--r-md);
+  background: var(--c-surface2);
+  border: 0.5px solid var(--c-border);
+}
+
+html[data-theme="dark"] .modal-backdrop {
+  background: rgba(0, 0, 0, 0.58);
+}
+html[data-theme="dark"] .modal-dialog {
+  box-shadow:
+    0 4px 28px rgba(0, 0, 0, 0.45),
+    0 0 0 0.5px rgba(255, 255, 255, 0.06);
+}
+html[data-theme="dark"] .modal-textarea {
+  background: var(--c-surface2);
+}
+html[data-theme="dark"] .modal-select {
+  background: var(--c-surface2);
+}
+
+/* Дневник: плотная вёрстка под Telegram Mini App (низкий viewport) */
+.content.content--diary-compact {
+  padding: 10px 12px;
+  gap: 8px;
+  padding-bottom: calc(var(--c-nav-h) + 10px + var(--c-safe-bottom));
+}
+.content.content--diary-compact .today-hero {
+  padding: 12px 14px;
+  gap: 8px;
+  border-radius: var(--r-lg);
+}
+.content.content--diary-compact .hero-title {
+  font-size: 18px;
+  letter-spacing: -0.35px;
+}
+.content.content--diary-compact .macro-row {
+  gap: 6px;
+}
+.content.content--diary-compact .macro-pill {
+  padding: 6px 8px;
+  border-radius: var(--r-sm);
+}
+.content.content--diary-compact .macro-val {
+  font-size: 12px;
+  font-weight: 700;
+  line-height: 1.2;
+}
+.content.content--diary-compact .macro-lab {
+  font-size: 9px;
+}
+.content.content--diary-compact .kpi {
+  font-size: 11px;
+}
+.content.content--diary-compact .section-title {
+  margin-top: 2px;
+}
+.content.content--diary-compact .section-lead {
+  font-size: 12px;
+  margin: -2px 0 2px;
+  line-height: 1.35;
+}
+.content.content--diary-compact .planned-meal-slot {
+  padding: 10px 12px;
+  gap: 5px;
+  border-radius: var(--r-md);
+}
+.content.content--diary-compact .planned-meal-dish {
+  font-size: 14px;
+  line-height: 1.25;
+}
+.content.content--diary-compact .planned-meal-meta,
+.content.content--diary-compact .planned-meal-time {
+  font-size: 12px;
+}
+.content.content--diary-compact .planned-meal-type {
+  font-size: 10px;
+}
+.content.content--diary-compact .planned-meal-done-kcal {
+  font-size: 13px;
+}
+.content.content--diary-compact .planned-meal-done-badge {
+  padding: 2px 8px;
+  font-size: 10px;
+}
+.content.content--diary-compact .planned-meal-done-source {
+  font-size: 11px;
+}
+.content.content--diary-compact .planned-meal-logged-block {
+  gap: 4px;
+}
+.content.content--diary-compact .pill-btn {
+  padding: 9px 12px;
+  font-size: 13px;
+  border-radius: var(--r-sm);
+}
+.content.content--diary-compact .planned-meal-cta {
+  margin-top: 2px;
+}
+.content.content--diary-compact .planned-meal-cta--secondary {
+  margin-top: 4px;
+}
+.content.content--diary-compact .diary-extra-btn {
+  margin-top: 2px;
+}
+.content.content--diary-compact .diary-history-bar {
+  margin-top: 2px;
+}
+.content.content--diary-compact .diary-history-toggle {
+  padding: 9px 11px;
+  font-size: 14px;
+  border-radius: var(--r-sm);
+}
+.content.content--diary-compact .diary-history-toggle-count {
+  font-size: 12px;
+  padding: 1px 6px;
+}
+.content.content--diary-compact .diary-history-panel {
+  gap: 6px;
+  margin-top: 6px;
+}
+.content.content--diary-compact .diary-history-card .list-item--compact {
+  padding: 8px 10px;
+}
+.content.content--diary-compact .diary-history-card .badge {
+  font-size: 10px;
+  padding: 2px 6px;
+}
+.content.content--diary-compact .diary-history-empty {
+  padding: 10px 12px;
+}
+.content.content--diary-compact .diary-history-empty-title {
+  font-size: 14px;
+  font-weight: 700;
+}
+.content.content--diary-compact .diary-history-empty-text {
+  font-size: 12px;
+  margin-top: 4px;
+}
+.content.content--diary-compact .plan-missing-hint--compact {
+  padding: 10px 12px;
+}
+.content.content--diary-compact .plan-missing-title {
+  font-size: 14px;
+  font-weight: 600;
+}
+.content.content--diary-compact .plan-missing-text {
+  font-size: 12px;
+  margin-top: 4px;
+}
+.content.content--diary-compact .card {
+  border-radius: var(--r-md);
 }
