@@ -1,5 +1,6 @@
 import { useEffect, useMemo, useState } from "react";
 import { apiGet } from "../api/client";
+import { IconCloseSmall, IconSearch } from "../components/ui-icons";
 
 export default function PantryTab({ showToast, userId }) {
   const [query, setQuery] = useState("");
@@ -34,7 +35,9 @@ export default function PantryTab({ showToast, userId }) {
     <div className="content">
       <div className="section-title">Запасы на сегодня</div>
       <div className="card" style={{ padding: 10, display: "flex", gap: 10, alignItems: "center" }}>
-        <span className="muted">⌕</span>
+        <span className="pantry-search-icon" aria-hidden>
+          <IconSearch size={18} />
+        </span>
         <input
           type="text"
           placeholder="Поиск продуктов..."
@@ -43,7 +46,15 @@ export default function PantryTab({ showToast, userId }) {
           style={{ flex: 1, background: "transparent", border: "none", outline: "none", color: "var(--c-text-primary)" }}
         />
         {query && (
-          <button onClick={() => setQuery("")} style={{ color: "var(--c-text-tertiary)", background: "none", border: "none" }}>✕</button>
+          <button
+            type="button"
+            className="icon-btn icon-btn--svg"
+            onClick={() => setQuery("")}
+            aria-label="Очистить поиск"
+            style={{ width: 32, height: 32, flexShrink: 0 }}
+          >
+            <IconCloseSmall size={16} />
+          </button>
         )}
       </div>
 
@@ -71,7 +82,13 @@ export default function PantryTab({ showToast, userId }) {
         </div>
       )}
 
-      <button className="pill-btn pill-btn-ghost" onClick={() => showToast("ℹ️", "Добавление через API будет следующим шагом")}>Добавить продукт</button>
+      <button
+        type="button"
+        className="pill-btn pill-btn-ghost"
+        onClick={() => showToast("Добавление через API будет следующим шагом", "info")}
+      >
+        Добавить продукт
+      </button>
     </div>
   );
 }

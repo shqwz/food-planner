@@ -6,8 +6,13 @@ CREATE TABLE IF NOT EXISTS users (
     age INTEGER,
     weight REAL,
     height REAL,
-    goal TEXT DEFAULT 'recomposition',  -- recomposition, mass_gain, cutting
+    goal TEXT DEFAULT 'recomposition',  -- recomposition, mass_gain, cutting, custom
+    goal_custom TEXT,
     budget_weekly REAL DEFAULT 0,
+    budget_tier TEXT,
+    budget_custom REAL,
+    kitchen_type TEXT,
+    onboarding_completed INTEGER DEFAULT 0,
     wake_time TEXT DEFAULT '08:00',
     sleep_time TEXT DEFAULT '23:00',
     created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP
@@ -115,9 +120,23 @@ CREATE TABLE IF NOT EXISTS shopping_list (
     estimated_cost REAL DEFAULT 0,
     for_date TEXT NOT NULL,           -- на какой день нужно
     is_purchased BOOLEAN DEFAULT 0,
+    skipped_in_trip INTEGER DEFAULT 0, -- 1 = «не купил» в режиме закупки
+    display_name TEXT,
+    display_unit TEXT,
+    is_manual INTEGER DEFAULT 0,
     created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
     FOREIGN KEY (user_id) REFERENCES users(id),
     FOREIGN KEY (product_id) REFERENCES products_ref(id)
+);
+
+-- Факт траты после «Завершить и разобрать»
+CREATE TABLE IF NOT EXISTS shopping_spend_log (
+    id INTEGER PRIMARY KEY AUTOINCREMENT,
+    user_id INTEGER NOT NULL,
+    amount REAL NOT NULL,
+    note TEXT,
+    created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
+    FOREIGN KEY (user_id) REFERENCES users(id)
 );
 
 -- Замеры тела (для графика прогресса)

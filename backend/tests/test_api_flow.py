@@ -48,7 +48,12 @@ class ApiFlowTests(unittest.TestCase):
         os.unlink(self.tmp.name)
 
     def test_shopping_list_uses_available_stock(self):
-        response = self.client.get("/api/shopping?user_id=123456789&days=0")
+        b = self.client.post(
+            "/api/shopping/build",
+            json={"user_id": 123456789, "days": 2},
+        )
+        self.assertEqual(b.status_code, 200)
+        response = self.client.get("/api/shopping?user_id=123456789")
         self.assertEqual(response.status_code, 200)
         data = response.get_json()
         self.assertEqual(len(data["items"]), 1)

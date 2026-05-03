@@ -198,7 +198,7 @@ export default function DiaryTab({ showToast, userId }) {
 
   const openModalForSlot = (planMealIndex) => {
     if (!todayPlan?.exists) {
-      showToast("📋", "На сегодня нет расчётного меню — сначала сгенерируй план");
+      showToast("На сегодня нет расчётного меню — сначала сгенерируй план", "info");
       return;
     }
     setModalStep("pick");
@@ -247,7 +247,7 @@ export default function DiaryTab({ showToast, userId }) {
     try {
       const p = await apiGet("/api/plan", { user_id: userId, date: diaryDate });
       if (!p.exists) {
-        showToast("📋", "На этот день нет плана — сначала сгенерируй его");
+        showToast("На этот день нет плана — сначала сгенерируй его", "info");
         setModalStep("pick");
         setEntryMode("");
         return;
@@ -260,7 +260,7 @@ export default function DiaryTab({ showToast, userId }) {
         setModalStep("plan_over_slider");
       }
     } catch (e) {
-      showToast("⚠️", e.message);
+      showToast(e.message, "error");
       setModalStep("pick");
       setEntryMode("");
     } finally {
@@ -278,7 +278,7 @@ export default function DiaryTab({ showToast, userId }) {
   const runAnalyze = async () => {
     const text = otherDescription.trim();
     if (!text) {
-      showToast("✏️", "Опиши, что съел");
+      showToast("Опиши, что съел", "info");
       return;
     }
     setAnalyzeLoading(true);
@@ -313,7 +313,7 @@ export default function DiaryTab({ showToast, userId }) {
       });
       setModalStep("other_preview");
     } catch (e) {
-      showToast("⚠️", e.message);
+      showToast(e.message, "error");
     } finally {
       setAnalyzeLoading(false);
     }
@@ -323,11 +323,11 @@ export default function DiaryTab({ showToast, userId }) {
     setSubmitting(true);
     try {
       await apiPost("/api/diary", { user_id: userId, ...payload });
-      showToast("✅", "Приём записан");
+      showToast("Приём записан", "success");
       closeModal();
       await Promise.all([refreshDiary(), refreshTodayPlan()]);
     } catch (e) {
-      showToast("⚠️", e.message);
+      showToast(e.message, "error");
     } finally {
       setSubmitting(false);
     }
@@ -362,7 +362,7 @@ export default function DiaryTab({ showToast, userId }) {
 
   const submitOther = async () => {
     if (!analyzedMeal?.ingredients?.length) {
-      showToast("⚠️", "Нечего сохранять");
+      showToast("Нечего сохранять", "error");
       return;
     }
     await submitDiaryPost({

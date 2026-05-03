@@ -24,9 +24,9 @@ class PlanGenerationContractTests(unittest.TestCase):
         conn = get_db()
         conn.execute(
             "INSERT INTO users (telegram_id, name, goal, budget_weekly, wake_time, sleep_time, weight, height) VALUES (?, ?, ?, ?, ?, ?, ?, ?)",
-            (123456789, "Test", "recomposition", 2500, "07:00", "23:00", 75, 178),
+            (998877665, "Test", "recomposition", 2500, "07:00", "23:00", 75, 178),
         )
-        user_id = conn.execute("SELECT id FROM users WHERE telegram_id = 123456789").fetchone()["id"]
+        user_id = conn.execute("SELECT id FROM users WHERE telegram_id = 998877665").fetchone()["id"]
         conn.execute("INSERT INTO training_days (user_id, day_of_week) VALUES (?, ?)", (user_id, 2))
         conn.commit()
         conn.close()
@@ -60,7 +60,7 @@ class PlanGenerationContractTests(unittest.TestCase):
         response = self.client.post(
             "/api/plan/generate",
             json={
-                "user_id": 123456789,
+                "user_id": 998877665,
                 "planner": {"sleep_quality": "poor", "overeating_event": {"date": "2026-05-03", "scale": "low"}},
             },
         )

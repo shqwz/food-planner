@@ -25,3 +25,44 @@ export async function apiPost(path, payload = {}) {
   }
   return data;
 }
+
+export async function apiPut(path, payload = {}) {
+  const response = await fetch(path, {
+    method: "PUT",
+    headers: { "Content-Type": "application/json" },
+    body: JSON.stringify(payload),
+  });
+  const data = await response.json();
+  if (!response.ok) {
+    throw new Error(data.error || "API request failed");
+  }
+  return data;
+}
+
+export async function apiPatch(path, payload = {}) {
+  const response = await fetch(path, {
+    method: "PATCH",
+    headers: { "Content-Type": "application/json" },
+    body: JSON.stringify(payload),
+  });
+  const data = await response.json();
+  if (!response.ok) {
+    throw new Error(data.error || "API request failed");
+  }
+  return data;
+}
+
+export async function apiDelete(path, params = {}) {
+  const url = new URL(path, window.location.origin);
+  Object.entries(params).forEach(([k, v]) => {
+    if (v !== undefined && v !== null && v !== "") {
+      url.searchParams.set(k, v);
+    }
+  });
+  const response = await fetch(url.toString(), { method: "DELETE" });
+  const data = await response.json();
+  if (!response.ok) {
+    throw new Error(data.error || "API request failed");
+  }
+  return data;
+}

@@ -191,7 +191,7 @@ def generate_weekly_plan(user_data: dict, products: list) -> dict:
     weight = user_data.get("weight", 75)
     goal = user_data.get("goal", "recomposition")
 
-    if goal == "recomposition":
+    if goal == "recomposition" or goal == "custom":
         training_kcal = weight * 33
         rest_kcal = weight * 28
         protein = weight * 2.0
@@ -220,6 +220,12 @@ def generate_weekly_plan(user_data: dict, products: list) -> dict:
     targets_json = json.dumps(algorithm_context.get("daily_targets", []), ensure_ascii=False)
     extra_rules = json.dumps(algorithm_context, ensure_ascii=False)
 
+    goal_line = (
+        f"Своя цель (текст пользователя): {user_data.get('goal_custom', '')}"
+        if goal == "custom"
+        else f"{goal} (рекомпозиция — набор мышц с одновременным снижением жира)"
+    )
+
     prompt = f"""
 Составь план питания на 7 дней (начиная с завтрашнего дня).
 
@@ -227,7 +233,7 @@ def generate_weekly_plan(user_data: dict, products: list) -> dict:
 Возраст: {user_data.get('age', 25)} лет
 Вес: {weight} кг
 Рост: {user_data.get('height', 175)} см
-Цель: {goal} (рекомпозиция — набор мышц с одновременным снижением жира)
+Цель: {goal_line}
 Предпочтения / исключения: {preferences}
 
 {training_context}

@@ -39,6 +39,46 @@ def ensure_schema_migrations(conn=None):
         cols = {row[1] for row in conn.execute("PRAGMA table_info(consumed_meals)").fetchall()}
         if cols and "entry_source" not in cols:
             conn.execute("ALTER TABLE consumed_meals ADD COLUMN entry_source TEXT DEFAULT 'other'")
+
+        sl_cols = {row[1] for row in conn.execute("PRAGMA table_info(shopping_list)").fetchall()}
+        if sl_cols:
+            if "skipped_in_trip" not in sl_cols:
+                conn.execute("ALTER TABLE shopping_list ADD COLUMN skipped_in_trip INTEGER DEFAULT 0")
+            if "display_name" not in sl_cols:
+                conn.execute("ALTER TABLE shopping_list ADD COLUMN display_name TEXT")
+            if "display_unit" not in sl_cols:
+                conn.execute("ALTER TABLE shopping_list ADD COLUMN display_unit TEXT")
+            if "is_manual" not in sl_cols:
+                conn.execute("ALTER TABLE shopping_list ADD COLUMN is_manual INTEGER DEFAULT 0")
+
+        conn.execute(
+            """CREATE TABLE IF NOT EXISTS shopping_spend_log (
+            id INTEGER PRIMARY KEY AUTOINCREMENT,
+            user_id INTEGER NOT NULL,
+            amount REAL NOT NULL,
+            note TEXT,
+            created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
+            FOREIGN KEY (user_id) REFERENCES users(id)
+        )"""
+        )
+
+        u_cols = {row[1] for row in conn.execute("PRAGMA table_info(users)").fetchall()}
+        if u_cols:
+            if "goal_custom" not in u_cols:
+                conn.execute("ALTER TABLE users ADD COLUMN goal_custom TEXT")
+            if "budget_tier" not in u_cols:
+                conn.execute("ALTER TABLE users ADD COLUMN budget_tier TEXT")
+            if "budget_custom" not in u_cols:
+                conn.execute("ALTER TABLE users ADD COLUMN budget_custom REAL")
+            if "kitchen_type" not in u_cols:
+                conn.execute("ALTER TABLE users ADD COLUMN kitchen_type TEXT")
+            if "onboarding_completed" not in u_cols:
+                conn.execute(
+                    "ALTER TABLE users ADD COLUMN onboarding_completed INTEGER DEFAULT 0"
+                )
+                conn.execute(
+                    "UPDATE users SET onboarding_completed = 1 WHERE onboarding_completed IS NULL"
+                )
     finally:
         if close:
             conn.commit()
@@ -88,6 +128,16 @@ def seed_default_user():
         VALUES (?, ?, ?, ?, ?, ?, ?)
         """,
         (123456789, "Алексей", "recomposition", 2500, 30, 75, 178),
+    )
+    conn.execute(
+        """
+        UPDATE users SET
+            onboarding_completed = 1,
+            budget_tier = COALESCE(budget_tier, 'medium'),
+            kitchen_type = COALESCE(kitchen_type, 'home')
+        WHERE telegram_id = ?
+        """,
+        (123456789,),
     )
     conn.commit()
     conn.close()
