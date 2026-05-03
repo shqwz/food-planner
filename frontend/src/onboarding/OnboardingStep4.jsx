@@ -64,8 +64,7 @@ export default function OnboardingStep4({ value, onChange }) {
     <div className="modal-stack onboarding-step-inner">
       <p className="onboarding-lead">
         Здесь — продукты и блюда, которые <strong>не должны попадать</strong> в автоматический план: аллергены,
-        непереносимость, религиозные ограничения или просто то, что не ешь. Можно оставить пустым и добавить позже
-        в профиле.
+        непереносимость, религиозные ограничения или просто то, что не ешь.
       </p>
 
       <div className="field-group">
@@ -81,7 +80,7 @@ export default function OnboardingStep4({ value, onChange }) {
                   value={row.text}
                   onChange={(e) => setLineText(row.id, e.target.value)}
                   onKeyDown={onKeyDown}
-                  placeholder="Название — Enter, чтобы добавить в список"
+                  placeholder="Название продукта или блюда"
                   autoComplete="off"
                   autoCorrect="off"
                   spellCheck={false}

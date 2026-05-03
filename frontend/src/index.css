@@ -236,6 +236,12 @@ body {
 
 .hero-label { font-size: 11px; font-weight: 600; letter-spacing: 0.8px; text-transform: uppercase; color: var(--c-accent); }
 .hero-title { font-size: 22px; font-weight: 700; letter-spacing: -0.5px; line-height: 1.2; color: var(--c-text-primary); }
+.hero-kpi-note {
+  margin: -2px 0 6px;
+  font-size: 12px;
+  line-height: 1.35;
+  font-weight: 500;
+}
 .hero-sub { font-size: 13px; color: var(--c-text-secondary); }
 
 .progress-track { height: 6px; background: var(--c-surface2); border-radius: 3px; overflow: hidden; }
@@ -457,46 +463,157 @@ body {
 .pill-btn-primary { background: var(--c-accent); color: #fff; }
 .pill-btn-ghost { background: var(--c-surface2); color: var(--c-text-primary); }
 
-/* Plan tab: horizontal day carousel */
-.plan-carousel {
-  width: 100%;
+/* Plan tab: дата + бейдж + рельса дней (число + точка плана) */
+.plan-day-picker {
+  background: var(--c-surface);
+  border-radius: var(--r-xl);
+  border: 0.5px solid var(--c-border);
+  box-shadow: var(--shadow-sm);
+  padding: 16px 14px 12px;
 }
-.plan-days-scroll {
+.plan-day-picker__head {
   display: flex;
-  overflow-x: auto;
-  scroll-snap-type: x mandatory;
-  scrollbar-width: none;
-  -ms-overflow-style: none;
-  width: 100%;
+  align-items: flex-start;
+  justify-content: space-between;
+  gap: 12px;
+  margin-bottom: 14px;
 }
-.plan-days-scroll::-webkit-scrollbar {
+.plan-day-picker__intro {
+  flex: 1;
+  min-width: 0;
+}
+.plan-day-picker__menu {
+  flex-shrink: 0;
+}
+.plan-day-picker__weekday {
+  margin: 0 0 10px;
+  font-size: 17px;
+  font-weight: 700;
+  letter-spacing: -0.35px;
+  line-height: 1.2;
+  color: var(--c-text-primary);
+  text-transform: capitalize;
+}
+.plan-day-picker__pill {
+  display: inline-flex;
+  align-items: center;
+  padding: 5px 11px;
+  border-radius: 999px;
+  font-size: 12px;
+  font-weight: 700;
+  letter-spacing: 0.02em;
+  border: 0.5px solid var(--c-border-mid);
+  background: var(--c-surface2);
+  color: var(--c-text-secondary);
+}
+.plan-day-picker__pill--training {
+  background: var(--c-accent-light);
+  color: var(--c-accent);
+  border-color: color-mix(in srgb, var(--c-accent) 22%, transparent);
+}
+.plan-day-picker__pill--rest {
+  background: var(--c-surface2);
+  color: var(--c-text-primary);
+}
+.plan-day-picker__pill--empty {
+  opacity: 0.92;
+  color: var(--c-text-tertiary);
+}
+
+.plan-day-rail {
+  display: flex;
+  gap: 6px;
+  overflow-x: auto;
+  padding: 2px 0 4px;
+  margin: 0 -4px;
+  padding-left: 4px;
+  padding-right: 4px;
+  scrollbar-width: none;
+  -webkit-overflow-scrolling: touch;
+}
+.plan-day-rail::-webkit-scrollbar {
   display: none;
 }
-.plan-day-page {
-  flex: 0 0 100%;
-  scroll-snap-align: start;
-  box-sizing: border-box;
-}
-.plan-dots {
+.plan-day-node {
+  flex: 0 0 auto;
   display: flex;
-  justify-content: center;
+  flex-direction: column;
   align-items: center;
-  flex-wrap: wrap;
-  gap: 6px;
+  gap: 7px;
+  min-width: 40px;
+  padding: 9px 8px 10px;
+  border: none;
+  border-radius: 14px;
+  background: var(--c-surface2);
+  color: inherit;
+  cursor: pointer;
+  font-family: var(--font);
+  transition:
+    background 0.16s ease,
+    box-shadow 0.16s ease,
+    transform 0.14s ease,
+    opacity 0.16s ease;
 }
-.plan-dot {
-  width: 8px;
-  height: 8px;
+.plan-day-node:focus-visible {
+  outline: none;
+  box-shadow: 0 0 0 3px var(--c-accent-light);
+}
+.plan-day-node--active {
+  background: var(--c-surface);
+  box-shadow:
+    0 0 0 2px var(--c-accent),
+    0 4px 12px rgba(0, 0, 0, 0.06);
+  transform: translateY(-1px);
+}
+.plan-day-node--has:not(.plan-day-node--active) {
+  box-shadow: inset 0 0 0 1px color-mix(in srgb, var(--c-accent) 30%, transparent);
+}
+.plan-day-node--empty {
+  opacity: 0.62;
+}
+.plan-day-node__num {
+  font-size: 13px;
+  font-weight: 800;
+  font-variant-numeric: tabular-nums;
+  letter-spacing: -0.04em;
+  color: var(--c-text-primary);
+  line-height: 1;
+}
+.plan-day-node--empty .plan-day-node__num {
+  color: var(--c-text-tertiary);
+  font-weight: 700;
+}
+.plan-day-node--active .plan-day-node__num {
+  color: var(--c-text-primary);
+}
+.plan-day-node__dot {
+  width: 6px;
+  height: 6px;
   border-radius: 50%;
   background: var(--c-border-mid);
-  transition: transform 0.12s ease, background 0.12s ease;
+  transition: transform 0.14s ease, background 0.14s ease, box-shadow 0.14s ease;
 }
-.plan-dot--active {
+.plan-day-node--has .plan-day-node__dot {
   background: var(--c-accent);
-  transform: scale(1.15);
+  opacity: 0.5;
 }
-.plan-dot--has {
-  box-shadow: 0 0 0 1px color-mix(in srgb, var(--c-accent) 35%, transparent);
+.plan-day-node--active .plan-day-node__dot {
+  width: 7px;
+  height: 7px;
+  opacity: 1;
+  box-shadow: 0 0 0 3px color-mix(in srgb, var(--c-accent) 26%, transparent);
+}
+.plan-day-node--empty .plan-day-node__dot {
+  background: var(--c-text-tertiary);
+  opacity: 0.25;
+}
+.plan-day-node--today:not(.plan-day-node--active) .plan-day-node__num {
+  box-shadow: 0 2px 0 0 color-mix(in srgb, var(--c-accent2) 85%, transparent);
+}
+html[data-theme="dark"] .plan-day-node--active {
+  box-shadow:
+    0 0 0 2px var(--c-accent),
+    0 4px 16px rgba(0, 0, 0, 0.35);
 }
 
 .plan-meals-stack {
@@ -522,8 +639,12 @@ body {
   background: var(--c-text-tertiary);
   border-radius: var(--r-lg) 0 0 var(--r-lg);
 }
+/* Завтрак — не accent (зелёный), чтобы не сливаться с кнопками и акцентами UI */
 .plan-meal-card--breakfast::before {
-  background: var(--c-accent);
+  background: hsl(222 36% 46%);
+}
+html[data-theme="dark"] .plan-meal-card--breakfast::before {
+  background: hsl(218 32% 58%);
 }
 .plan-meal-card--lunch::before {
   background: var(--c-accent2);
@@ -580,6 +701,12 @@ body {
   font-weight: 700;
   color: var(--c-accent);
   letter-spacing: -0.02em;
+}
+.plan-meal-card--breakfast .plan-meal-card__kcal {
+  color: hsl(222 38% 38%);
+}
+html[data-theme="dark"] .plan-meal-card--breakfast .plan-meal-card__kcal {
+  color: hsl(218 36% 72%);
 }
 .plan-meal-card__macros {
   font-size: 12px;
