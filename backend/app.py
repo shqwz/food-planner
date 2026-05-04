@@ -6,7 +6,9 @@ from shopping import shopping_bp
 from profile import profile_bp
 from services import resolve_user_id, find_or_create_product, NotFoundError
 import os
-from config import FLASK_DEBUG, TELEGRAM_BOT_TOKEN, DB_PATH
+import argparse
+
+from config import FLASK_DEBUG, TELEGRAM_BOT_TOKEN, resolved_db_path
 
 app = Flask(__name__, static_folder="../frontend/dist", static_url_path="")
 
@@ -87,6 +89,28 @@ def get_pantry():
         })
 
     return jsonify(products)
+
+
+@app.route("/api/pantry", methods=["DELETE"])
+def clear_pantry():
+    """Удалить все позиции кладовой пользователя и связанные резервы под план."""
+    user_id = request.args.get("user_id")
+    if not user_id:
+        return jsonify({"error": "user_id обязателен"}), 400
+
+    conn = get_db()
+    try:
+        internal_user_id = resolve_user_id(conn, user_id)
+    except NotFoundError as e:
+        conn.close()
+        return jsonify({"error": str(e)}), 404
+
+    cur = conn.execute("DELETE FROM pantry WHERE user_id = ?", (internal_user_id,))
+    deleted = cur.rowcount
+    conn.execute("DELETE FROM reservations WHERE user_id = ?", (internal_user_id,))
+    conn.commit()
+    conn.close()
+    return jsonify({"status": "ok", "deleted_pantry_rows": deleted})
 
 
 @app.route("/api/pantry", methods=["POST"])
@@ -221,9 +245,21 @@ if TELEGRAM_BOT_TOKEN and os.environ.get("RUN_SCHEDULER_IN_WEB", "0") == "1":
 
 
 if __name__ == "__main__":
+    _default_port = int(
+        os.environ.get("PORT") or os.environ.get("FLASK_RUN_PORT") or "5000"
+    )
+    _parser = argparse.ArgumentParser(add_help=True)
+    _parser.add_argument(
+        "--port",
+        type=int,
+        default=_default_port,
+        help="Порт HTTP-сервера (по умолчанию из PORT / FLASK_RUN_PORT или 5000)",
+    )
+    _args, _unknown = _parser.parse_known_args()
+
     # Инициализация при первом запуске
-    if not os.path.exists(DB_PATH):
+    if not os.path.exists(resolved_db_path()):
         init_db()
         seed_products()
         seed_default_user()
-    app.run(debug=FLASK_DEBUG, host="0.0.0.0", port=5000)
+    app.run(debug=FLASK_DEBUG, host="0.0.0.0", port=_args.port)

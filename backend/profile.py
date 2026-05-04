@@ -35,6 +35,8 @@ def _row_to_profile_dict(row, exists: bool, training_days: list, excluded: list)
         "training_days": training_days,
         "excluded_foods": excluded,
         "kitchen_type": d.get("kitchen_type"),
+        # ai_packs | legacy_rebuild | null (ещё не было генерации с сохранением режима)
+        "shopping_list_mode": d.get("shopping_list_mode"),
     }
     return out
 

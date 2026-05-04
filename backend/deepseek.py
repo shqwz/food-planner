@@ -1,8 +1,13 @@
+import math
 import requests
 import json
 import time
 import re
 from config import openrouter_api_key
+from database import get_db
+from dates_util import today_msk_iso
+from services import find_or_create_product, find_product_id
+from shopping_service import default_price_per_reference_unit, estimate_line_cost, pantry_price_hint
 
 OPENROUTER_URL = "https://openrouter.ai/api/v1/chat/completions"
 
@@ -297,6 +302,294 @@ def generate_weekly_plan(user_data: dict, products: list) -> dict:
 }}
 """
     return call_ai(prompt, temperature=0.7)
+
+
+def _canonical_product_key(raw: str) -> str:
+    return (raw or "").strip().lower()
+
+
+def _normalize_ingredient_unit(u: str) -> str:
+    x = (u or "г").strip().lower()
+    if x in ("г", "g", "гр", "gram", "grams"):
+        return "г"
+    if x in ("мл", "ml", "milliliter"):
+        return "мл"
+    if x in ("шт", "штука", "штуки", "pcs", "pc", "штук"):
+        return "шт"
+    return "г"
+
+
+def _liquid_milk_retail(name: str) -> bool:
+    """Кефир/молоко/ряженка в рознице — обычно бутылки в мл, не мелкие «граммы»."""
+    n = (name or "").lower()
+    if "сухое молок" in n or "молоко сух" in n or "сух молок" in n:
+        return False
+    return any(
+        x in n
+        for x in (
+            "кефир",
+            "молоко",
+            "ряженк",
+            "простокваш",
+            "айран",
+            "тан ",
+            "йогурт пить",
+            "ряженка",
+        )
+    )
+
+
+def _normalize_retail_pack(name: str, pack_u: str, pack_s: float) -> tuple[str, float]:
+    """Реалистичная фасовка для РФ: кефир/молоко не как «200 г» в пачке, а бутылка ~0,93–1 л."""
+    u = _normalize_ingredient_unit(pack_u)
+    try:
+        s = float(pack_s)
+    except (TypeError, ValueError):
+        s = 0.0
+    if s <= 0:
+        return u, s
+    if _liquid_milk_retail(name):
+        if u == "г" and s < 450:
+            return ("мл", 930.0)
+        if u == "мл" and s < 450:
+            return ("мл", 930.0)
+    return u, s
+
+
+def _deficit_in_pack_units(deficit: float, recipe_u: str, pack_u: str, name: str) -> float:
+    """Сколько нужно в «единицах упаковки» для деления на размер упаковки."""
+    ru = _normalize_ingredient_unit(recipe_u)
+    pu = _normalize_ingredient_unit(pack_u)
+    d = max(0.0, float(deficit))
+    if ru == pu:
+        return d
+    if _liquid_milk_retail(name) and ru == "г" and pu == "мл":
+        return d
+    if _liquid_milk_retail(name) and ru == "мл" and pu == "г":
+        return d
+    return d
+
+
+def get_packaging(conn, product_name: str) -> dict:
+    """
+    Типичная упаковка и средняя цена за неё в РФ: из кэша product_packaging или один запрос к LLM.
+    Возвращает { unit, default_pack_size, avg_price_per_pack_rub }.
+    При ошибке — безопасные значения (г, 500, цена 0 → дальше эвристика в корзине).
+    """
+    safe = {"unit": "г", "default_pack_size": 500.0, "avg_price_per_pack_rub": 0.0}
+    key = _canonical_product_key(product_name)
+    if not key:
+        return safe
+    try:
+        row = conn.execute(
+            """SELECT unit, default_pack_size, avg_price_per_pack_rub
+               FROM product_packaging WHERE product_name = ?""",
+            (key,),
+        ).fetchone()
+        if row:
+            rd = dict(row)
+            u = _normalize_ingredient_unit(rd.get("unit") or "г")
+            try:
+                sz = float(rd.get("default_pack_size") or 0)
+            except (TypeError, ValueError):
+                sz = 0.0
+            try:
+                avg_rub = float(rd.get("avg_price_per_pack_rub") or 0)
+            except (TypeError, ValueError):
+                avg_rub = 0.0
+            if sz > 0:
+                u2, sz2 = _normalize_retail_pack(product_name, u, sz)
+                if (u2, sz2) != (u, sz):
+                    conn.execute(
+                        """UPDATE product_packaging SET unit = ?, default_pack_size = ?,
+                           avg_price_per_pack_rub = NULL WHERE product_name = ?""",
+                        (u2, sz2, key),
+                    )
+                    return {"unit": u2, "default_pack_size": sz2, "avg_price_per_pack_rub": 0.0}
+                return {"unit": u, "default_pack_size": sz, "avg_price_per_pack_rub": avg_rub}
+            # Иначе: нет строки / неверный размер / в кэше упаковка без цены — один запрос к LLM и запись в БД
+
+        escaped = (product_name or "").replace("'", "''")
+        prompt = f"""Ты ориентируешься на типичные розничные сети России (Перекрёсток, Пятёрочка, Магнит, Лента и т.п.).
+
+Для продукта «{escaped}» укажи:
+1) стандартную упаковку, в какой граммовке / объёме / количестве штук его обычно продают;
+2) среднюю ориентировочную цену в рублях за одну такую упаковку (типичная по РФ на 2025–2026 год, одно число).
+
+Важно: для кефира, молока, ряженки и других жидких молочных напитков указывай объём бутылки/пакета в «мл» (например 930 или 1000), не выдумывай нереалистичные «200 г» как типовую бутылку.
+
+Верни строго JSON одним объектом:
+{{ "unit": "г", "default_pack_size": 800, "avg_price_per_pack_rub": 95 }}
+где unit — только «г», «мл» или «шт»; default_pack_size — число (размер одной упаковки в этой единице); avg_price_per_pack_rub — число рублей за одну упаковку."""
+
+        raw = call_ai(prompt, temperature=0.1)
+        if not isinstance(raw, dict):
+            return safe
+        u = _normalize_ingredient_unit(str(raw.get("unit") or "г"))
+        try:
+            sz = float(raw.get("default_pack_size") or 0)
+        except (TypeError, ValueError):
+            sz = 0.0
+        try:
+            avg_rub = float(raw.get("avg_price_per_pack_rub") or raw.get("avg_price") or 0)
+        except (TypeError, ValueError):
+            avg_rub = 0.0
+        if u not in ("г", "мл", "шт"):
+            u = "г"
+        if sz <= 0:
+            return safe
+        if avg_rub < 0:
+            avg_rub = 0.0
+
+        u, sz = _normalize_retail_pack(product_name, u, sz)
+
+        conn.execute(
+            """INSERT OR REPLACE INTO product_packaging (product_name, unit, default_pack_size, avg_price_per_pack_rub)
+               VALUES (?, ?, ?, ?)""",
+            (key, u, sz, avg_rub if avg_rub > 0 else None),
+        )
+        return {"unit": u, "default_pack_size": sz, "avg_price_per_pack_rub": max(0.0, avg_rub)}
+    except Exception:
+        return safe
+
+
+def build_shopping_list(week_plan: dict, user_id: int) -> dict:
+    """
+    Корзина по плану: сумма ингредиентов, минус кладовая, упаковки через get_packaging, запись в shopping_list.
+
+    week_plan: { "YYYY-MM-DD": { "meals": [ { "ingredients": [ {name, amount, unit} ] } ] } }
+    user_id: внутренний id пользователя (users.id).
+    """
+    out_list: list[dict] = []
+    total_estimated = 0.0
+
+    if not isinstance(week_plan, dict) or not week_plan:
+        conn = get_db()
+        try:
+            conn.execute("DELETE FROM shopping_list WHERE user_id = ?", (int(user_id),))
+            conn.commit()
+        finally:
+            conn.close()
+        return {"shopping_list": [], "total_estimated_cost": 0.0}
+
+    totals: dict[tuple[str, str], float] = {}
+    display_for_key: dict[str, str] = {}
+
+    for _date, day in week_plan.items():
+        if not isinstance(day, dict):
+            continue
+        meals = day.get("meals") or []
+        if not isinstance(meals, list):
+            continue
+        for meal in meals:
+            if not isinstance(meal, dict):
+                continue
+            for ing in meal.get("ingredients") or []:
+                if not isinstance(ing, dict):
+                    continue
+                raw_name = str(ing.get("name") or "").strip()
+                if not raw_name:
+                    continue
+                key = _canonical_product_key(raw_name)
+                if key not in display_for_key:
+                    display_for_key[key] = raw_name
+                unit = _normalize_ingredient_unit(str(ing.get("unit") or "г"))
+                try:
+                    amt = float(ing.get("amount") or 0)
+                except (TypeError, ValueError):
+                    amt = 0.0
+                if amt <= 0:
+                    continue
+                k = (key, unit)
+                totals[k] = totals.get(k, 0.0) + amt
+
+    conn = get_db()
+    try:
+        for (name_key, unit), need in totals.items():
+            display_name = display_for_key.get(name_key) or name_key
+            product_id = find_product_id(conn, display_name) or find_or_create_product(conn, display_name)
+
+            row = conn.execute(
+                "SELECT COALESCE(SUM(amount), 0) as s FROM pantry WHERE user_id = ? AND product_id = ?",
+                (int(user_id), product_id),
+            ).fetchone()
+            try:
+                pantry_amt = float(row["s"] if row else 0)
+            except (TypeError, ValueError):
+                pantry_amt = 0.0
+
+            deficit = need - pantry_amt
+            if deficit <= 1e-6:
+                continue
+
+            pack = get_packaging(conn, display_name)
+            pu = _normalize_ingredient_unit(pack["unit"])
+            ps = float(pack["default_pack_size"] or 0)
+            pu, ps = _normalize_retail_pack(display_name, pu, ps)
+            if ps <= 0:
+                pu, ps = "г", 500.0
+            if (
+                _normalize_ingredient_unit(unit) == "г"
+                and pu == "мл"
+                and _liquid_milk_retail(display_name)
+            ):
+                packs = max(1, math.ceil(float(deficit) / ps))
+            else:
+                need_for_div = _deficit_in_pack_units(deficit, unit, pu, display_name)
+                packs = max(1, math.ceil(need_for_div / ps))
+
+            avg_rub_pack = float(pack.get("avg_price_per_pack_rub") or 0)
+            if avg_rub_pack > 0:
+                est_per_pack = round(avg_rub_pack, 2)
+                est_total = round(avg_rub_pack * packs, 2)
+            else:
+                price_ref = pantry_price_hint(conn, int(user_id), product_id)
+                if not price_ref or price_ref <= 0:
+                    price_ref = default_price_per_reference_unit(pu)
+                est_per_pack = estimate_line_cost(ps, pu, price_ref)
+                est_total = round(est_per_pack * packs, 2)
+            total_estimated += est_total
+
+            out_list.append(
+                {
+                    "name": display_name,
+                    "deficit": round(deficit, 3),
+                    "unit": unit,
+                    "pack_size": ps,
+                    "packs": packs,
+                    "estimated_price_per_pack": round(est_per_pack, 2),
+                    "estimated_total": est_total,
+                    "avg_price_per_pack_rub": round(avg_rub_pack, 2) if avg_rub_pack > 0 else None,
+                }
+            )
+
+        conn.execute("DELETE FROM shopping_list WHERE user_id = ?", (int(user_id),))
+        for_date = today_msk_iso()
+        for it in out_list:
+            name = str(it.get("name") or "").strip()
+            if not name:
+                continue
+            pid = find_product_id(conn, name) or find_or_create_product(conn, name)
+            u = str(it.get("unit") or "г").strip() or "г"
+            deficit = float(it.get("deficit") or 0)
+            ps = float(it.get("pack_size") or 0)
+            packs = int(it.get("packs") or 0)
+            est_total = float(it.get("estimated_total") or 0)
+            conn.execute(
+                """
+                INSERT INTO shopping_list (
+                    user_id, product_id, amount_needed, estimated_cost, for_date,
+                    is_purchased, skipped_in_trip, display_name, display_unit, pack_unit, pack_weight, packs, is_manual
+                ) VALUES (?, ?, ?, ?, ?, 0, 0, ?, ?, ?, ?, ?, 0)
+                """,
+                (int(user_id), pid, deficit, est_total, for_date, name, u, pu, ps, packs),
+            )
+
+        conn.commit()
+    finally:
+        conn.close()
+
+    return {"shopping_list": out_list, "total_estimated_cost": round(total_estimated, 2)}
 
 
 def analyze_meal_description(description: str) -> dict:

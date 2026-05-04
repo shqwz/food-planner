@@ -13,6 +13,9 @@ CREATE TABLE IF NOT EXISTS users (
     budget_custom REAL,
     kitchen_type TEXT,
     onboarding_completed INTEGER DEFAULT 0,
+    -- Как собрана актуальная корзина после последней генерации плана / пересборки:
+    -- 'ai_packs' (ИИ + упаковки) | 'legacy_rebuild' (алгоритм rebuild_shopping_list) | NULL (ещё не генерировали)
+    shopping_list_mode TEXT,
     wake_time TEXT DEFAULT '08:00',
     sleep_time TEXT DEFAULT '23:00',
     created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP
@@ -111,6 +114,17 @@ CREATE TABLE IF NOT EXISTS consumed_meals (
     FOREIGN KEY (user_id) REFERENCES users(id)
 );
 
+-- Типичные фасовки для расчёта упаковок (кэш + ответы LLM)
+CREATE TABLE IF NOT EXISTS product_packaging (
+    id INTEGER PRIMARY KEY AUTOINCREMENT,
+    product_name TEXT UNIQUE NOT NULL,
+    unit TEXT NOT NULL,
+    default_pack_size REAL,
+    -- Средняя ориентировочная цена в ₽ за одну типичную упаковку (РФ), кэш из LLM
+    avg_price_per_pack_rub REAL,
+    created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP
+);
+
 -- Корзина покупок
 CREATE TABLE IF NOT EXISTS shopping_list (
     id INTEGER PRIMARY KEY AUTOINCREMENT,
@@ -123,6 +137,9 @@ CREATE TABLE IF NOT EXISTS shopping_list (
     skipped_in_trip INTEGER DEFAULT 0, -- 1 = «не купил» в режиме закупки
     display_name TEXT,
     display_unit TEXT,
+    pack_unit TEXT,
+    pack_weight REAL DEFAULT 0,
+    packs INTEGER DEFAULT 0,
     is_manual INTEGER DEFAULT 0,
     created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
     FOREIGN KEY (user_id) REFERENCES users(id),

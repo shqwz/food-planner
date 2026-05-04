@@ -177,8 +177,45 @@ body {
 }
 
 .modal-title--notice {
-  padding-bottom: 2px;
+  margin: 0;
+  padding-bottom: 4px;
   border-bottom: 2px solid color-mix(in srgb, var(--c-danger) 35%, transparent);
+  display: inline-block;
+  width: fit-content;
+  max-width: 100%;
+}
+
+.modal-dialog--replan .replan-modal-stack {
+  gap: 14px;
+}
+.replan-modal-skipped {
+  margin: 0;
+  padding: 12px 14px;
+  border-radius: var(--r-md);
+  background: var(--c-surface2);
+  border: 0.5px solid var(--c-border);
+  font-size: 14px;
+  font-weight: 500;
+  line-height: 1.45;
+  color: var(--c-text-primary);
+}
+.replan-modal-prompt {
+  margin: 0;
+  font-size: 15px;
+  font-weight: 600;
+  letter-spacing: -0.02em;
+  line-height: 1.35;
+  color: var(--c-text-primary);
+}
+.replan-modal-actions {
+  display: flex;
+  gap: 10px;
+  flex-wrap: wrap;
+  padding-top: 2px;
+}
+.replan-modal-actions__btn {
+  flex: 1;
+  min-width: 120px;
 }
 
 .section-title--date {
@@ -463,6 +500,179 @@ body {
 .pill-btn-primary { background: var(--c-accent); color: #fff; }
 .pill-btn-ghost { background: var(--c-surface2); color: var(--c-text-primary); }
 
+/* Корзина: выбор окна плана (дни) */
+.cart-window-field {
+  margin-bottom: 14px;
+}
+.cart-window-label {
+  display: block;
+  font-size: 12px;
+  font-weight: 600;
+  letter-spacing: 0.05em;
+  text-transform: uppercase;
+  color: var(--c-text-secondary);
+  margin-bottom: 6px;
+}
+.cart-window-sublabel {
+  font-size: 13px;
+  line-height: 1.35;
+  margin: 0 0 10px;
+}
+.cart-window-segment {
+  display: flex;
+  gap: 4px;
+  padding: 4px;
+  border-radius: var(--r-md);
+  background: var(--c-surface2);
+  border: 0.5px solid var(--c-border-mid);
+}
+.cart-window-day {
+  flex: 1;
+  min-width: 0;
+  border: none;
+  border-radius: 10px;
+  padding: 10px 2px;
+  font-family: var(--font);
+  font-size: 14px;
+  font-weight: 700;
+  font-variant-numeric: tabular-nums;
+  letter-spacing: -0.02em;
+  color: var(--c-text-secondary);
+  background: transparent;
+  cursor: pointer;
+  transition:
+    background 0.16s ease,
+    color 0.16s ease,
+    box-shadow 0.16s ease;
+}
+.cart-window-day:hover:not(.cart-window-day--active) {
+  color: var(--c-text-primary);
+  background: color-mix(in srgb, var(--c-surface) 55%, transparent);
+}
+.cart-window-day--active {
+  background: var(--c-surface);
+  color: var(--c-accent);
+  box-shadow: var(--shadow-sm);
+}
+.cart-window-day:focus-visible {
+  outline: none;
+  box-shadow: 0 0 0 3px var(--c-accent-light);
+}
+html[data-theme="dark"] .cart-window-day--active {
+  box-shadow: 0 1px 4px rgba(0, 0, 0, 0.35);
+}
+
+.shopping-empty-list .shopping-empty-list__row {
+  align-items: flex-start;
+}
+
+/* Режим магазина (shopping trip) */
+.content--shopping-trip {
+  padding-bottom: 8px;
+}
+
+.shopping-trip-topcard {
+  border-color: color-mix(in srgb, var(--c-accent) 28%, var(--c-border-mid));
+  box-shadow: 0 0 0 1px color-mix(in srgb, var(--c-accent) 12%, transparent);
+}
+
+.shopping-trip-day-card {
+  border-color: color-mix(in srgb, var(--c-accent) 15%, var(--c-border-mid));
+  overflow: hidden;
+}
+
+.shopping-trip-add-line {
+  width: 100%;
+  margin-top: 8px;
+  border-style: dashed;
+  border-width: 1px;
+  border-color: color-mix(in srgb, var(--c-accent) 35%, var(--c-border-mid));
+  background: color-mix(in srgb, var(--c-accent) 5%, var(--c-surface2));
+}
+
+.shopping-trip-total-card {
+  border-top: 3px solid var(--c-accent);
+  border-top-left-radius: var(--r-lg);
+  border-top-right-radius: var(--r-lg);
+}
+
+.shopping-trip-row {
+  display: flex;
+  flex-direction: column;
+  align-items: stretch;
+  gap: 12px;
+  padding: 14px 14px 14px 16px;
+  border-bottom: 0.5px solid var(--c-border);
+  border-left: 4px solid transparent;
+}
+
+.shopping-trip-row:last-child {
+  border-bottom: none;
+}
+
+.shopping-trip-row--active {
+  border-left-color: var(--c-accent);
+  background: color-mix(in srgb, var(--c-accent) 8%, var(--c-surface));
+}
+
+.shopping-trip-row--skipped {
+  border-left-color: color-mix(in srgb, var(--c-danger) 75%, var(--c-border));
+  background: color-mix(in srgb, var(--c-danger) 6%, var(--c-surface));
+}
+
+.shopping-trip-row__main {
+  display: flex;
+  width: 100%;
+  gap: 10px;
+  align-items: flex-start;
+}
+
+.shopping-trip-row__title {
+  line-height: 1.25;
+}
+
+.shopping-trip-row__meta.kpi {
+  margin-top: 4px;
+}
+
+.shopping-trip-row__actions {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 8px;
+  width: 100%;
+}
+
+.shopping-trip-btn-notake {
+  flex: 1;
+  min-width: 120px;
+  background: var(--c-surface2);
+  color: var(--c-text-primary);
+  border: 0.5px solid var(--c-border-mid);
+}
+
+.shopping-trip-row--skipped .shopping-trip-btn-notake {
+  border-color: color-mix(in srgb, var(--c-accent) 45%, var(--c-border-mid));
+  color: var(--c-accent);
+  background: color-mix(in srgb, var(--c-accent) 10%, var(--c-surface2));
+}
+
+.shopping-trip-btn-edit {
+  flex: 1;
+  min-width: 120px;
+}
+
+.shopping-trip-footer {
+  margin-top: 16px;
+  padding: 14px 0 calc(8px + var(--c-safe-bottom));
+  border-top: 0.5px solid var(--c-border);
+}
+
+.shopping-trip-footer__btns {
+  display: flex;
+  flex-direction: column;
+  gap: 10px;
+}
+
 /* Plan tab: дата + бейдж + рельса дней (число + точка плана) */
 .plan-day-picker {
   background: var(--c-surface);
@@ -686,6 +896,19 @@ html[data-theme="dark"] .plan-meal-card--breakfast::before {
   letter-spacing: -0.35px;
   line-height: 1.3;
   color: var(--c-text-primary);
+}
+.plan-meal-card__ingredients {
+  margin: 0;
+  padding: 0;
+  list-style: none;
+  display: flex;
+  flex-direction: column;
+  gap: 4px;
+}
+.plan-meal-card__ingredient-item {
+  font-size: 13px;
+  line-height: 1.35;
+  color: var(--c-text-secondary);
 }
 .plan-meal-card__stats {
   display: flex;
@@ -1076,6 +1299,29 @@ html[data-theme="dark"] .plan-meal-card--breakfast .plan-meal-card__kcal {
   color: var(--c-accent);
   text-align: center;
   padding: 4px 0 2px;
+}
+
+.plan-generate-state {
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  justify-content: center;
+  gap: 16px;
+  padding: 28px 12px 36px;
+  min-height: 140px;
+}
+.plan-generate-spinner {
+  width: 40px;
+  height: 40px;
+  border-radius: 50%;
+  border: 3px solid color-mix(in srgb, var(--c-border-mid) 70%, transparent);
+  border-top-color: var(--c-accent);
+  animation: plan-generate-spin 0.75s linear infinite;
+}
+@keyframes plan-generate-spin {
+  to {
+    transform: rotate(360deg);
+  }
 }
 .modal-option-card--accent {
   border-color: var(--c-accent);

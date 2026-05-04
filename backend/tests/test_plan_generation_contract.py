@@ -34,8 +34,10 @@ class PlanGenerationContractTests(unittest.TestCase):
     def tearDown(self):
         os.unlink(self.tmp.name)
 
+    @patch("plan.build_shopping_list")
     @patch("plan.generate_weekly_plan")
-    def test_generate_returns_strategy_and_explanations(self, mock_generate):
+    def test_generate_returns_strategy_and_explanations(self, mock_generate, mock_ai_cart):
+        mock_ai_cart.return_value = {"shopping_list": {}}
         mock_generate.return_value = {
             "week_plan": {
                 "placeholder-day-1": {
@@ -70,6 +72,59 @@ class PlanGenerationContractTests(unittest.TestCase):
         self.assertIn("strategy", body)
         self.assertIn("explanations", body)
         self.assertGreater(len(body["explanations"]), 0)
+        self.assertEqual(body.get("shopping_list_mode"), "ai_packs")
+
+        from database import get_db
+
+        conn = get_db()
+        row = conn.execute(
+            "SELECT shopping_list_mode FROM users WHERE telegram_id = ?", (998877665,)
+        ).fetchone()
+        conn.close()
+        self.assertEqual(dict(row)["shopping_list_mode"], "ai_packs")
+
+    @patch("plan.rebuild_shopping_list")
+    @patch("plan.build_shopping_list")
+    @patch("plan.generate_weekly_plan")
+    def test_generate_sets_shopping_list_mode_legacy_on_ai_failure(
+        self, mock_generate, mock_ai_cart, mock_rebuild
+    ):
+        mock_generate.return_value = {
+            "week_plan": {
+                "placeholder-day-1": {
+                    "day_type": "rest",
+                    "meals": [
+                        {
+                            "type": "breakfast",
+                            "time": "08:00",
+                            "dish_name": "Test meal",
+                            "ingredients": [{"name": "яйцо", "amount": 2, "unit": "шт"}],
+                            "total_kcal": 300,
+                            "total_protein": 20,
+                            "total_fat": 15,
+                            "total_carbs": 10,
+                        }
+                    ],
+                    "daily_totals": {"kcal": 1800, "protein": 140, "fat": 60, "carbs": 180, "cost": 250},
+                }
+            }
+        }
+        mock_ai_cart.side_effect = RuntimeError("AI cart unavailable")
+        mock_rebuild.return_value = {}
+
+        response = self.client.post(
+            "/api/plan/generate",
+            json={
+                "user_id": 998877665,
+                "period": "day",
+                "start_from": "2026-06-01",
+                "planner": {},
+            },
+        )
+        self.assertEqual(response.status_code, 200)
+        body = response.get_json()
+        self.assertEqual(body.get("shopping_list_mode"), "legacy_rebuild")
+        mock_rebuild.assert_called()
 
 
 if __name__ == "__main__":

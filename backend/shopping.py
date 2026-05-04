@@ -7,6 +7,7 @@ from shopping_service import (
     implied_unit_price_from_line,
     default_price_per_reference_unit,
     estimate_line_cost,
+    shopping_empty_hint_code,
 )
 
 
@@ -14,18 +15,36 @@ shopping_bp = Blueprint("shopping", __name__)
 
 
 def _shopping_row_public(r, ref_name_fallback: str) -> dict:
-    name = (r["display_name"] or ref_name_fallback or "").strip()
-    unit = r["display_unit"] or "г"
+    rd = dict(r)
+    name = (rd.get("display_name") or ref_name_fallback or "").strip()
+    unit = rd.get("display_unit") or "г"
+    pack_unit = rd.get("pack_unit") or None
+    pack_weight = float(rd.get("pack_weight") or 0)
+    packs = int(rd.get("packs") or 0)
+    estimated = float(rd.get("estimated_cost") or 0)
+    deficit = float(rd.get("amount_needed") or 0)
+    price_per_pack = round(estimated / packs, 2) if packs > 0 else 0.0
+    if not pack_unit and packs > 0 and pack_weight > 0:
+        pack_unit = unit
     return {
-        "id": r["id"],
-        "product_id": r["product_id"],
+        "id": rd["id"],
+        "product_id": rd["product_id"],
         "name": name or ref_name_fallback,
-        "amount_needed": float(r["amount_needed"] or 0),
+        "amount_needed": deficit,
+        "total_needed": deficit,
+        "deficit": deficit,
         "unit": unit,
-        "estimated_cost": float(r["estimated_cost"] or 0),
-        "for_date": r["for_date"],
-        "skipped_in_trip": bool(r["skipped_in_trip"]),
-        "is_manual": bool(r["is_manual"]),
+        "pack_unit": pack_unit,
+        "pack_size": pack_weight,
+        "estimated_cost": estimated,
+        "estimated_price": estimated,
+        "estimated_total": estimated,
+        "estimated_price_per_pack": price_per_pack,
+        "packs": packs,
+        "pack_weight": pack_weight,
+        "for_date": rd["for_date"],
+        "skipped_in_trip": bool(rd["skipped_in_trip"]),
+        "is_manual": bool(rd["is_manual"]),
     }
 
 
@@ -69,10 +88,10 @@ def get_shopping_cart():
     ).fetchall()
 
     budget = conn.execute(
-        "SELECT budget_weekly FROM users WHERE id = ?", (internal_user_id,)
+        "SELECT budget_weekly, shopping_list_mode FROM users WHERE id = ?", (internal_user_id,)
     ).fetchone()
     bw = budget["budget_weekly"] if budget else None
-    conn.close()
+    cart_mode = budget["shopping_list_mode"] if budget else None
 
     grouped = {}
     flat = []
@@ -84,13 +103,27 @@ def get_shopping_cart():
 
     dates = sorted(grouped.keys())
     summary = build_cart_summary([dict(row) for row in rows], bw)
+    empty = len(flat) == 0
+
+    days_param = request.args.get("days")
+    try:
+        hint_days = int(days_param) if days_param is not None and str(days_param).strip() != "" else 2
+    except (TypeError, ValueError):
+        hint_days = 2
+    hint_days = max(1, min(hint_days, 7))
+    empty_hint = shopping_empty_hint_code(conn, internal_user_id, hint_days, empty) if empty else None
+
+    conn.close()
 
     return jsonify({
         "grouped_by_date": grouped,
         "items": flat,
         "dates": dates,
         "summary": summary,
-        "empty": len(flat) == 0,
+        "total_estimated_cost": summary["estimated_total"],
+        "empty": empty,
+        "empty_hint": empty_hint,
+        "shopping_list_mode": cart_mode,
     })
 
 
@@ -111,6 +144,10 @@ def build_shopping():
         return jsonify({"error": str(e)}), 404
 
     stats = rebuild_shopping_list(conn, internal_user_id, days=days)
+    conn.execute(
+        "UPDATE users SET shopping_list_mode = ? WHERE id = ?",
+        ("legacy_rebuild", internal_user_id),
+    )
     conn.commit()
     conn.close()
     stats["status"] = "ok"

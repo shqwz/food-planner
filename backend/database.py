@@ -1,11 +1,12 @@
 import sqlite3
 import os
-from config import DB_PATH
+from config import resolved_db_path
 
 
 def get_db():
-    """Возвращает соединение с БД"""
-    conn = sqlite3.connect(DB_PATH)
+    """Возвращает соединение с БД (путь через config.resolved_db_path)."""
+    path = resolved_db_path()
+    conn = sqlite3.connect(path)
     conn.row_factory = sqlite3.Row  # чтобы обращаться к полям по имени
     conn.execute("PRAGMA foreign_keys = ON")
     return conn
@@ -24,6 +25,7 @@ def init_db():
     cursor.executescript(schema)
     conn.commit()
     ensure_schema_migrations(conn)
+    seed_product_packaging_defaults(conn)
     conn.commit()
     conn.close()
     print("✅ База данных инициализирована")
@@ -48,8 +50,29 @@ def ensure_schema_migrations(conn=None):
                 conn.execute("ALTER TABLE shopping_list ADD COLUMN display_name TEXT")
             if "display_unit" not in sl_cols:
                 conn.execute("ALTER TABLE shopping_list ADD COLUMN display_unit TEXT")
+            if "pack_weight" not in sl_cols:
+                conn.execute("ALTER TABLE shopping_list ADD COLUMN pack_weight REAL DEFAULT 0")
+            if "packs" not in sl_cols:
+                conn.execute("ALTER TABLE shopping_list ADD COLUMN packs INTEGER DEFAULT 0")
             if "is_manual" not in sl_cols:
                 conn.execute("ALTER TABLE shopping_list ADD COLUMN is_manual INTEGER DEFAULT 0")
+            if "pack_unit" not in sl_cols:
+                conn.execute("ALTER TABLE shopping_list ADD COLUMN pack_unit TEXT")
+
+        conn.execute(
+            """CREATE TABLE IF NOT EXISTS product_packaging (
+            id INTEGER PRIMARY KEY AUTOINCREMENT,
+            product_name TEXT UNIQUE NOT NULL,
+            unit TEXT NOT NULL,
+            default_pack_size REAL,
+            avg_price_per_pack_rub REAL,
+            created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP
+        )"""
+        )
+
+        pp_cols = {row[1] for row in conn.execute("PRAGMA table_info(product_packaging)").fetchall()}
+        if pp_cols and "avg_price_per_pack_rub" not in pp_cols:
+            conn.execute("ALTER TABLE product_packaging ADD COLUMN avg_price_per_pack_rub REAL")
 
         conn.execute(
             """CREATE TABLE IF NOT EXISTS shopping_spend_log (
@@ -79,10 +102,36 @@ def ensure_schema_migrations(conn=None):
                 conn.execute(
                     "UPDATE users SET onboarding_completed = 1 WHERE onboarding_completed IS NULL"
                 )
+            if "shopping_list_mode" not in u_cols:
+                conn.execute("ALTER TABLE users ADD COLUMN shopping_list_mode TEXT")
+        seed_product_packaging_defaults(conn)
     finally:
         if close:
             conn.commit()
             conn.close()
+
+
+def seed_product_packaging_defaults(conn):
+    """Стартовые типичные фасовки (РФ); INSERT OR IGNORE — не перезаписывает уже заполненный кэш."""
+    rows = [
+        ("гречка сухая", "г", 800.0),
+        ("рис сухой", "г", 800.0),
+        ("кефир 1%", "мл", 900.0),
+        ("молоко", "мл", 900.0),
+        ("яйцо", "шт", 10.0),
+        ("грудка куриная", "г", 500.0),
+        ("творожный сыр", "г", 200.0),
+        ("хлебцы ржаные", "г", 120.0),
+        ("масло растительное", "мл", 900.0),
+        ("соль", "г", 500.0),
+    ]
+    for product_name, unit, default_pack_size in rows:
+        conn.execute(
+            """INSERT OR IGNORE INTO product_packaging (product_name, unit, default_pack_size, avg_price_per_pack_rub)
+               VALUES (?, ?, ?, NULL)""",
+            (product_name, unit, default_pack_size),
+        )
+
 
 def seed_products():
     """Заполняет справочник продуктов базовыми значениями (твой список)"""

@@ -86,19 +86,51 @@ def snapshot_pantry_price_for_line(conn, user_id: int, product_id: int, unit_dis
     return default_price_per_reference_unit(u)
 
 
-def rebuild_shopping_list(conn, internal_user_id: int, days: int = 2) -> dict:
+def buy_by_date_after_pantry_chronological(
+    dates: list[str],
+    daily: dict[str, dict[int, float]],
+    free: dict[int, float],
+) -> tuple[dict[str, dict[int, float]], int]:
     """
-    Перезаписывает shopping_list для пользователя из meal_plan за N дней с сегодняшнего.
-    Возвращает сводку {inserted_lines, skipped_days, totals_estimated}
+    Сколько докупить по каждой дате, если кладовую «съедаем» в хронологическом порядке.
+
+    Раньше дефицит считался по сумме need за всё окно минус free и размазывался по дням с начала,
+    из‑за чего на ранние даты попадали покупки, хотя для короткого префикса дней запаса хватало.
+    """
+    rem: dict[int, float] = defaultdict(float)
+    for pid, v in free.items():
+        rem[pid] = float(v or 0)
+
+    buy_by_date: dict[str, dict[int, float]] = {d: {} for d in dates}
+    n_lines = 0
+    for d in sorted(dates):
+        day_map = daily.get(d) or {}
+        for pid in sorted(day_map.keys()):
+            need = float(day_map[pid] or 0)
+            if need <= 1e-9:
+                continue
+            avail = max(0.0, rem[pid])
+            from_pantry = min(need, avail)
+            rem[pid] = avail - from_pantry
+            buy = need - from_pantry
+            if buy > 1e-9:
+                buy_by_date[d][pid] = buy
+                n_lines += 1
+    return buy_by_date, n_lines
+
+
+def aggregate_shopping_window(conn, internal_user_id: int, days: int) -> dict | None:
+    """
+    Потребность по плану за окно дней и остаток к закупке с учётом кладовой (без записи в shopping_list).
+    Возвращает None, если окно дат пустое.
     """
     dates = plan_window_dates(conn, internal_user_id, days)
     if not dates:
-        return {"inserted_lines": 0, "totals_estimated": 0.0}
-
-    conn.execute("DELETE FROM shopping_list WHERE user_id = ?", (internal_user_id,))
+        return None
 
     daily: dict[str, dict[int, float]] = {d: defaultdict(float) for d in dates}
     unit_by_pid: dict[int, str] = {}
+    had_plan_in_window = False
 
     for d in dates:
         row = conn.execute(
@@ -107,6 +139,7 @@ def rebuild_shopping_list(conn, internal_user_id: int, days: int = 2) -> dict:
         ).fetchone()
         if not row:
             continue
+        had_plan_in_window = True
         try:
             meals = json.loads(row["meals_json"])
         except (json.JSONDecodeError, TypeError):
@@ -135,37 +168,70 @@ def rebuild_shopping_list(conn, internal_user_id: int, days: int = 2) -> dict:
     ):
         pantry_sums[r["product_id"]] = float(r["t"] or 0)
 
-    reserved_sums: dict[int, float] = {}
-    for r in conn.execute(
-        """SELECT product_id, SUM(amount_reserved) as t FROM reservations
-           WHERE user_id = ? AND plan_date BETWEEN ? AND ? GROUP BY product_id""",
-        (internal_user_id, dates[0], dates[-1]),
-    ):
-        reserved_sums[r["product_id"]] = float(r["t"] or 0)
-
-    all_pids = set(need_global.keys()) | set(pantry_sums.keys()) | set(reserved_sums.keys())
+    # Потребность daily уже полностью отражает состав meal_plan. Таблица reservations
+    # дублирует те же количества под день и используется приёмами дневника (списание/снятие);
+    # если ещё и вычитать SUM(reservations) за всё окно из кладовой, получается двойной
+    # учёт и при расширении окна (новый plan_date в BETWEEN) «съедается» запас для ранних дней.
+    all_pids = set(need_global.keys()) | set(pantry_sums.keys())
     free: dict[int, float] = {}
     for pid in all_pids:
-        free[pid] = max(0.0, pantry_sums.get(pid, 0.0) - reserved_sums.get(pid, 0.0))
+        free[pid] = max(0.0, pantry_sums.get(pid, 0.0))
 
-    buy_global: dict[int, float] = {}
-    for pid, need in need_global.items():
-        buy_global[pid] = max(0.0, float(need) - free.get(pid, 0.0))
+    buy_by_date, would_buy_lines = buy_by_date_after_pantry_chronological(dates, daily, free)
 
-    left = dict(buy_global)
+    return {
+        "dates": dates,
+        "had_plan_in_window": had_plan_in_window,
+        "daily": daily,
+        "need_global": dict(need_global),
+        "unit_by_pid": unit_by_pid,
+        "buy_by_date": buy_by_date,
+        "would_buy_lines": would_buy_lines,
+    }
+
+
+def shopping_empty_hint_code(conn, internal_user_id: int, days: int, db_list_empty: bool) -> str | None:
+    """Почему корзина пуста: для UI. None если в БД уже есть строки."""
+    if not db_list_empty:
+        return None
+    agg = aggregate_shopping_window(conn, internal_user_id, days)
+    if agg is None:
+        return "no_plan"
+    if not agg["had_plan_in_window"]:
+        return "no_plan"
+    if not agg["need_global"]:
+        return "no_ingredients"
+    if agg["would_buy_lines"] == 0:
+        return "all_in_pantry"
+    return "not_built"
+
+
+def rebuild_shopping_list(conn, internal_user_id: int, days: int = 2) -> dict:
+    """
+    Перезаписывает shopping_list для пользователя из meal_plan за N дней с сегодняшнего.
+    Возвращает сводку {inserted_lines, skipped_days, totals_estimated}
+    """
+    agg = aggregate_shopping_window(conn, internal_user_id, days)
+    if not agg:
+        return {"inserted_lines": 0, "totals_estimated": 0.0}
+
+    dates = agg["dates"]
+    daily = agg["daily"]
+    unit_by_pid = agg["unit_by_pid"]
+    buy_by_date = agg["buy_by_date"]
+
+    conn.execute("DELETE FROM shopping_list WHERE user_id = ?", (internal_user_id,))
+
     sorted_dates = sorted(dates)
     inserted = 0
     total_est = 0.0
 
     for d in sorted_dates:
-        for pid in sorted(daily[d].keys()):
-            need_d = daily[d][pid]
-            if left.get(pid, 0.0) <= 1e-9:
-                continue
-            take = min(need_d, left[pid])
+        day_buys = buy_by_date.get(d) or {}
+        for pid in sorted(day_buys.keys()):
+            take = float(day_buys[pid] or 0)
             if take <= 1e-9:
                 continue
-            left[pid] -= take
 
             pref = conn.execute(
                 "SELECT name, unit FROM products_ref WHERE id = ?",

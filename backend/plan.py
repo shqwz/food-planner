@@ -1,9 +1,9 @@
 from flask import Blueprint, request, jsonify
 from database import get_db
-from deepseek import generate_weekly_plan, analyze_meal_description
+from deepseek import generate_weekly_plan, analyze_meal_description, build_shopping_list
 from datetime import datetime, timedelta
 import json
-from services import resolve_user_id, find_product_id, NotFoundError
+from services import resolve_user_id, find_product_id, find_or_create_product, NotFoundError
 from planner_engine import build_planning_context
 from shopping_service import rebuild_shopping_list
 from dates_util import today_msk, today_msk_iso, parse_iso_date, iso, add_days
@@ -206,11 +206,13 @@ def generate_plan():
     explanations_by_date = {x["date"]: x["why"] for x in algorithm_context.get("explanations", [])}
     targets_by_date = {x["date"]: x for x in algorithm_context.get("daily_targets", [])}
 
+    persisted_plan_for_shopping: dict[str, dict] = {}
     for pos, plan_date_iso in enumerate(dates_iso):
         idx = indices[pos] if pos < len(indices) else pos
         if idx >= len(ordered_days):
             break
         day_data = ordered_days[idx]
+        persisted_plan_for_shopping[plan_date_iso] = {"meals": day_data.get("meals", [])}
         _persist_one_day(
             conn,
             internal_user_id=internal_user_id,
@@ -221,7 +223,18 @@ def generate_plan():
             targets_by_date=targets_by_date,
         )
 
-    rebuild_shopping_list(conn, internal_user_id, days=2)
+    # Корзина: расчёт упаковок (кэш + LLM фасовки) и запись в shopping_list внутри build_shopping_list.
+    shopping_list_mode = "legacy_rebuild"
+    try:
+        build_shopping_list(persisted_plan_for_shopping, internal_user_id)
+        shopping_list_mode = "ai_packs"
+    except Exception:
+        rebuild_shopping_list(conn, internal_user_id, days=2)
+
+    conn.execute(
+        "UPDATE users SET shopping_list_mode = ? WHERE id = ?",
+        (shopping_list_mode, internal_user_id),
+    )
     conn.commit()
     conn.close()
 
@@ -232,6 +245,7 @@ def generate_plan():
             "week_plan": week_plan.get("week_plan"),
             "period": period,
             "saved_dates": dates_iso,
+            "shopping_list_mode": shopping_list_mode,
             "explanations": algorithm_context.get("explanations", []),
             "strategy": {
                 "budget_weekly_limit": algorithm_context.get("budget_weekly_limit"),

@@ -1,10 +1,97 @@
 from flask import Blueprint, request, jsonify
 from database import get_db
 from datetime import datetime
+from collections import defaultdict
 import json
 from services import resolve_user_id, find_product_id, NotFoundError
 
 diary_bp = Blueprint("diary", __name__)
+
+_EPS = 1e-6
+
+
+def _aggregate_planned_needs(conn, ingredients: list) -> tuple[dict[int, float], dict[int, str], str | None]:
+    """Суммы по product_id и подпись для ошибок. При неизвестном продукте — (..., сообщение)."""
+    needs: dict[int, float] = defaultdict(float)
+    label: dict[int, str] = {}
+    for ing in ingredients:
+        amt = float(ing.get("amount") or 0)
+        if amt <= _EPS:
+            continue
+        raw = (ing.get("name") or "").strip()
+        pid = find_product_id(conn, raw) if raw else None
+        if not pid:
+            return {}, {}, f'Продукт «{raw or "?"}» не найден в справочнике. Добавьте его на склад или отметьте приём иначе.'
+        needs[pid] += amt
+        label[pid] = raw
+    return dict(needs), label, None
+
+
+def _apply_planned_pantry_and_reservations(
+    conn,
+    internal_user_id: int,
+    ingredients: list,
+    plan_date: str,
+    meal_type: str,
+) -> str | None:
+    """
+    Проверка остатков, списание с кладовой (несколько строк на продукт), снятие резервов.
+    Возвращает текст ошибки или None.
+    """
+    needs, label_by_pid, err = _aggregate_planned_needs(conn, ingredients)
+    if err:
+        return err
+    if not needs:
+        return None
+
+    for pid, need_amt in needs.items():
+        row = conn.execute(
+            "SELECT COALESCE(SUM(amount), 0) AS t FROM pantry WHERE user_id = ? AND product_id = ?",
+            (internal_user_id, pid),
+        ).fetchone()
+        avail = float(row["t"] or 0)
+        if avail + _EPS < need_amt:
+            pr = conn.execute("SELECT name FROM products_ref WHERE id = ?", (pid,)).fetchone()
+            nm = (pr["name"] if pr else None) or label_by_pid.get(pid) or str(pid)
+            return (
+                f"Недостаточно «{nm}» в кладовой: нужно {need_amt:g} "
+                f"(всего на складе {avail:g}). Пополните кладовую или скорректируйте порцию."
+            )
+
+    for pid, need_amt in needs.items():
+        rem = float(need_amt)
+        prow = conn.execute(
+            """SELECT id, amount FROM pantry
+               WHERE user_id = ? AND product_id = ? AND amount > 0
+               ORDER BY id""",
+            (internal_user_id, pid),
+        ).fetchall()
+        for r in prow:
+            if rem <= _EPS:
+                break
+            cur = float(r["amount"] or 0)
+            take = min(rem, cur)
+            new_amt = cur - take
+            if new_amt <= _EPS:
+                conn.execute("DELETE FROM pantry WHERE id = ?", (r["id"],))
+            else:
+                conn.execute("UPDATE pantry SET amount = ? WHERE id = ?", (new_amt, r["id"]))
+            rem -= take
+        if rem > 1e-4:
+            return "Не удалось списать продукт с кладовой (обратитесь в поддержку)."
+
+    for ing in ingredients:
+        amt = float(ing.get("amount") or 0)
+        if amt <= _EPS:
+            continue
+        pid = find_product_id(conn, (ing.get("name") or "").strip())
+        if pid:
+            conn.execute(
+                """DELETE FROM reservations
+                   WHERE user_id = ? AND product_id = ? AND plan_date = ? AND meal_type = ?""",
+                (internal_user_id, pid, plan_date, meal_type),
+            )
+    return None
 
 
 def _aggregate_meal_totals(ingredients: list, meal_totals_fallback: dict | None) -> dict:
@@ -129,24 +216,13 @@ def add_meal():
     total_carbs = totals_agg["carbs"]
     total_cost = totals_agg["cost"]
 
-    # Если приём по плану — списываем продукты из кладовой и снимаем резерв
     if was_planned:
-        for ing in ingredients:
-            # Находим продукт в справочнике
-            product_id = find_product_id(conn, ing["name"])
-            if product_id:
-                # Списываем из кладовой
-                conn.execute('''
-                    UPDATE pantry
-                    SET amount = amount - ?
-                    WHERE user_id = ? AND product_id = ? AND amount >= ?
-                ''', (ing["amount"], internal_user_id, product_id, ing["amount"]))
-
-                # Снимаем резерв
-                conn.execute('''
-                    DELETE FROM reservations
-                    WHERE user_id = ? AND product_id = ? AND plan_date = ? AND meal_type = ?
-                ''', (internal_user_id, product_id, plan_date, meal_type))
+        plan_err = _apply_planned_pantry_and_reservations(
+            conn, internal_user_id, ingredients, plan_date, meal_type
+        )
+        if plan_err:
+            conn.close()
+            return jsonify({"error": plan_err}), 409
 
     # Записываем в дневник
     conn.execute('''

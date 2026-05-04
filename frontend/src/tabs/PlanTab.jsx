@@ -62,6 +62,22 @@ function planDayNumber(iso) {
   return new Date(`${iso}T12:00:00`).getDate();
 }
 
+function formatIngredientAmount(amount) {
+  const n = Number(amount);
+  if (!Number.isFinite(n)) return "";
+  if (Math.abs(n - Math.round(n)) < 0.001) return String(Math.round(n));
+  return n.toFixed(1).replace(/\.0$/, "");
+}
+
+function ingredientLabel(ing) {
+  if (!ing || typeof ing !== "object") return "";
+  const name = String(ing.name || "").trim();
+  if (!name) return "";
+  const amount = formatIngredientAmount(ing.amount);
+  const unit = String(ing.unit || "").trim();
+  return amount ? `${name} - ${amount}${unit ? ` ${unit}` : ""}` : name;
+}
+
 export default function PlanTab({ showToast, userId }) {
   const [days, setDays] = useState([]);
   const [loading, setLoading] = useState(true);
@@ -69,6 +85,7 @@ export default function PlanTab({ showToast, userId }) {
   const [activeIdx, setActiveIdx] = useState(0);
   const [menuOpen, setMenuOpen] = useState(false);
   const [extendDismissed, setExtendDismissed] = useState(false);
+  const [generateBusy, setGenerateBusy] = useState(false);
   const [diaryTotals, setDiaryTotals] = useState({ kcal: 0, protein: 0, fat: 0, carbs: 0 });
 
   const loadWindow = useCallback(async () => {
@@ -129,17 +146,21 @@ export default function PlanTab({ showToast, userId }) {
     !extendDismissed && daysLeft != null && daysLeft <= 3 && lastPlan != null;
 
   const runGenerate = async (payload) => {
-    await apiPost("/api/plan/generate", {
-      user_id: userId,
-      planner: {
-        meals_count: "auto",
-        sleep_quality: "normal",
-        overeating_event: null,
-      },
-      ...payload,
-    });
-    showToast("План обновлён", "success");
-    await loadWindow();
+    setGenerateBusy(true);
+    try {
+      await apiPost("/api/plan/generate", {
+        user_id: userId,
+        planner: {
+          meals_count: "auto",
+          sleep_quality: "normal",
+          overeating_event: null,
+        },
+        ...payload,
+      });
+      await loadWindow();
+    } finally {
+      setGenerateBusy(false);
+    }
   };
 
   const handleMenuConfirm = async ({ period, start_from }) => {
@@ -157,11 +178,14 @@ export default function PlanTab({ showToast, userId }) {
   };
 
   const extendPlan = async () => {
+    setMenuOpen(true);
     try {
       await runGenerate({ period: "week" });
       setExtendDismissed(true);
     } catch (e) {
       showToast(e.message, "error");
+    } finally {
+      setMenuOpen(false);
     }
   };
 
@@ -214,10 +238,10 @@ export default function PlanTab({ showToast, userId }) {
             Продлить на неделю вперёд?
           </div>
           <div style={{ display: "flex", gap: 10 }}>
-            <button type="button" className="pill-btn pill-btn-primary" onClick={extendPlan}>
+            <button type="button" className="pill-btn pill-btn-primary" onClick={extendPlan} disabled={generateBusy}>
               Да
             </button>
-            <button type="button" className="pill-btn pill-btn-ghost" onClick={() => setExtendDismissed(true)}>
+            <button type="button" className="pill-btn pill-btn-ghost" onClick={() => setExtendDismissed(true)} disabled={generateBusy}>
               Позже
             </button>
           </div>
@@ -242,7 +266,13 @@ export default function PlanTab({ showToast, userId }) {
               {!current.exists ? "Нет плана" : current.day_type === "training" ? "Тренировка" : "Отдых"}
             </span>
           </div>
-          <button type="button" className="icon-btn icon-btn--svg plan-day-picker__menu" aria-label="Меню плана" onClick={() => setMenuOpen(true)}>
+          <button
+            type="button"
+            className="icon-btn icon-btn--svg plan-day-picker__menu"
+            aria-label="Меню плана"
+            disabled={generateBusy}
+            onClick={() => setMenuOpen(true)}
+          >
             <IconMoreHorizontal size={20} />
           </button>
         </div>
@@ -334,13 +364,20 @@ export default function PlanTab({ showToast, userId }) {
         </div>
       )}
 
-      <button type="button" className="pill-btn pill-btn-primary" style={{ marginTop: 12 }} onClick={() => setMenuOpen(true)}>
+      <button
+        type="button"
+        className="pill-btn pill-btn-primary"
+        style={{ marginTop: 12 }}
+        disabled={generateBusy}
+        onClick={() => setMenuOpen(true)}
+      >
         Обновить план
       </button>
 
       <PlanMenuModal
-        open={menuOpen}
+        open={menuOpen || generateBusy}
         anchorDate={anchorDate}
+        busy={generateBusy}
         onClose={() => setMenuOpen(false)}
         onConfirm={handleMenuConfirm}
       />
@@ -355,6 +392,9 @@ function PlanMealCard({ meal }) {
   const p = Math.round(Number(meal.total_protein) || 0);
   const f = Math.round(Number(meal.total_fat) || 0);
   const c = Math.round(Number(meal.total_carbs) || 0);
+  const ingredients = Array.isArray(meal.ingredients)
+    ? meal.ingredients.map(ingredientLabel).filter(Boolean)
+    : [];
 
   return (
     <article className={`plan-meal-card plan-meal-card--${type}`}>
@@ -368,6 +408,15 @@ function PlanMealCard({ meal }) {
           ) : null}
         </div>
         <h3 className="plan-meal-card__dish">{meal.dish_name || "Блюдо"}</h3>
+        {ingredients.length > 0 ? (
+          <ul className="plan-meal-card__ingredients" aria-label="Ингредиенты и количество">
+            {ingredients.map((item) => (
+              <li key={item} className="plan-meal-card__ingredient-item">
+                {item}
+              </li>
+            ))}
+          </ul>
+        ) : null}
         <div className="plan-meal-card__stats">
           <span className="plan-meal-card__kcal">{kcal} ккал</span>
           <span className="plan-meal-card__macros" aria-label="Белки, жиры, углеводы">

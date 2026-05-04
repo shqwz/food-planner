@@ -534,11 +534,11 @@ export default function DiaryTab({ showToast, userId }) {
                     ) : null}
                   </div>
                   <div className="badge">{Math.round(entry.totals?.kcal || 0)} ккал</div>
-                </div>
-              </div>
-            ))
-          )}
         </div>
+      </div>
+            ))
+            )}
+          </div>
       ) : null}
 
       {modalOpen ? (

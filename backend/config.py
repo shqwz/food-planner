@@ -33,9 +33,26 @@ def _as_bool(value: str, default: bool = False) -> bool:
     return value.strip().lower() in {"1", "true", "yes", "on"}
 
 
-BASE_DIR = os.path.dirname(__file__)
+BASE_DIR = os.path.dirname(os.path.abspath(__file__))
+REPO_ROOT = os.path.dirname(BASE_DIR)
 _load_repo_dotenv_best_effort()
-DB_PATH = os.environ.get("FOOD_PLANNER_DB_PATH", os.path.join(BASE_DIR, "food_planner.db"))
+
+
+def resolved_db_path() -> str:
+    """Путь к SQLite: FOOD_PLANNER_DB_PATH или backend/food_planner.db.
+
+    Относительные значения из .env (например backend/food_planner.db) считаются от корня репозитория,
+    а не от текущего cwd — чтобы `cd backend` и скрипты из подпапок не ломали подключение.
+    """
+    raw = (os.environ.get("FOOD_PLANNER_DB_PATH") or "").strip()
+    if raw:
+        if os.path.isabs(raw):
+            return os.path.normpath(raw)
+        return os.path.normpath(os.path.join(REPO_ROOT, raw))
+    return os.path.normpath(os.path.join(BASE_DIR, "food_planner.db"))
+
+
+DB_PATH = resolved_db_path()
 OPENROUTER_API_KEY = os.environ.get("OPENROUTER_API_KEY", "")
 
 
