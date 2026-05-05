@@ -45,12 +45,6 @@ function emptyShoppingTitle(code) {
   }
 }
 
-function shoppingListModeHint(apiMode) {
-  if (apiMode === "ai_packs") return "Режим корзины: ИИ с упаковками (последняя генерация плана).";
-  if (apiMode === "legacy_rebuild") return "Режим корзины: классический пересчёт из плана.";
-  return null;
-}
-
 function emptyShoppingBody(code) {
   switch (code) {
     case "all_in_pantry":
@@ -121,8 +115,6 @@ export default function ShoppingTab({ showToast, userId }) {
     const range = fmtRangeHeading(dates);
     return range ? `Список покупок · ${range}` : "Список покупок";
   }, [mode, dates]);
-
-  const cartModeHint = shoppingListModeHint(cart?.shopping_list_mode);
 
   const run = async (fn) => {
     setLoading(true);
@@ -228,11 +220,6 @@ export default function ShoppingTab({ showToast, userId }) {
     <div className={`content${mode === "trip" ? " content--shopping-trip" : ""}`}>
       <div className={`card${mode === "trip" ? " shopping-trip-topcard" : ""}`} style={{ padding: 16 }}>
         <div style={{ fontWeight: 800, fontSize: 18, marginBottom: 8 }}>{headline}</div>
-        {cartModeHint ? (
-          <p className="muted" style={{ fontSize: 12, fontWeight: 600, lineHeight: 1.4, margin: "0 0 10px" }}>
-            {cartModeHint}
-          </p>
-        ) : null}
         {mode === "view" && dates.length > 0 && !cart?.empty && (
           <p className="muted" style={{ fontSize: 13, lineHeight: 1.45, margin: "0 0 12px" }}>
             Даты ниже — из плана. Пересборка заменяет весь список.
@@ -461,21 +448,11 @@ function ShoppingRow({ item, mode, onToggleSkip, onEdit }) {
             {item.is_manual ? <span className="manual-pill">Своё</span> : null}
             {item.name}
           </div>
-          <div className="shopping-trip-row__meta">
-            {item.packs > 0 && item.pack_weight > 0 ? (
-              <>
-                <div className="kpi" style={{ fontWeight: 600 }}>
-                  {item.packs}×{item.pack_weight} {item.pack_unit || item.unit} · {ruMoney(item.estimated_cost)}
-                </div>
-                <div className="muted" style={{ fontSize: 12, marginTop: 2, lineHeight: 1.35 }}>
-                  в плане {item.amount_needed} {item.unit}
-                </div>
-              </>
-            ) : (
-              <div className="kpi" style={{ fontWeight: 600 }}>
-                {ruMoney(item.estimated_cost)}
-              </div>
-            )}
+          <div className="kpi shopping-trip-row__meta">
+            {item.packs > 0
+              ? `${item.packs}×${item.pack_weight} ${item.pack_unit} · ${ruMoney(item.estimated_cost)}`
+              : `${item.amount_needed} ${item.unit} · ${ruMoney(item.estimated_cost)}`
+            }
           </div>
         </div>
       </div>

@@ -242,23 +242,29 @@ def rebuild_shopping_list(conn, internal_user_id: int, days: int = 2) -> dict:
             display_unit = unit_by_pid.get(pid) or ref_unit or "г"
 
             ppu = snapshot_pantry_price_for_line(conn, internal_user_id, pid, display_unit)
-            est = estimate_line_cost(take, display_unit, ppu)
+            from deepseek import get_packaging, _deficit_in_pack_units, _normalize_ingredient_unit, _normalize_retail_pack
+            import math
+            pack = get_packaging(conn, display_name)
+            pu = _normalize_ingredient_unit(pack['unit'])
+            ps = float(pack['default_pack_size'] or 0)
+            pu, ps = _normalize_retail_pack(display_name, pu, ps)
+            if ps <= 0:
+                pu, ps = 'г', 500.0
+            need_div = _deficit_in_pack_units(take, display_unit, pu, display_name)
+            packs = max(1, math.ceil(need_div / ps)) if ps > 0 else 0
+            avg_rub = float(pack.get('avg_price_per_pack_rub') or 0)
+            if avg_rub > 0:
+                est = round(avg_rub * packs, 2)
+            else:
+                est = estimate_line_cost(take, display_unit, ppu)
             total_est += est
-
             conn.execute(
                 """INSERT INTO shopping_list (
                     user_id, product_id, amount_needed, estimated_cost, for_date,
-                    is_purchased, skipped_in_trip, display_name, display_unit, is_manual
-                ) VALUES (?,?,?,?,?,0,0,?,?,0)""",
-                (
-                    internal_user_id,
-                    pid,
-                    take,
-                    est,
-                    d,
-                    display_name,
-                    display_unit,
-                ),
+                    is_purchased, skipped_in_trip, display_name, display_unit,
+                    pack_unit, pack_weight, packs, is_manual
+                ) VALUES (?,?,?,?,?,0,0,?,?,?,?,?,0)""",
+                (internal_user_id, pid, take, est, d, display_name, display_unit, pu, ps, packs),
             )
             inserted += 1
 

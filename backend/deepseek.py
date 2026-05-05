@@ -370,9 +370,73 @@ def _deficit_in_pack_units(deficit: float, recipe_u: str, pack_u: str, name: str
     return d
 
 
+def _fuzzy_packaging_row(conn, product_name: str):
+    """
+    Нечёткий поиск упаковки в product_packaging.
+    Два прохода:
+      1. Слова из запроса ищем в названиях таблицы:  таблица LIKE '%творог%'
+         «творог обезжиренный» → найдёт строку «творог»
+      2. Названия из таблицы ищем в запросе: запрос LIKE '%творожный%'
+         «творожный сыр» → найдёт если в запросе есть «творожный»
+    Возвращает первую найденную строку или None.
+    """
+    import re
+    name_lower = (product_name or "").lower()
+    words = re.split(r"[\s,\(\)/]+", name_lower)
+    words = [w for w in words if len(w) >= 3]
+
+    # Проход 1: слова из запроса → ищем в таблице
+    # «куриная грудка» → LIKE '%куриная%', LIKE '%грудка%'
+    for word in words:
+        row = conn.execute(
+            "SELECT unit, default_pack_size, avg_price_per_pack_rub "
+            "FROM product_packaging WHERE LOWER(product_name) LIKE ?",
+            (f"%{word}%",),
+        ).fetchone()
+        if row:
+            return row
+
+    # Проход 2: берём все строки таблицы и проверяем содержится ли
+    # любое слово из названия таблицы в нашем запросе
+    # «творожный сыр» в таблице → проверяем есть ли «творожный» в «творог обезжиренный»
+    all_rows = conn.execute(
+        "SELECT product_name, unit, default_pack_size, avg_price_per_pack_rub "
+        "FROM product_packaging WHERE default_pack_size > 0"
+    ).fetchall()
+    for row in all_rows:
+        tbl_words = re.split(r"[\s,\(\)/]+", (row["product_name"] or "").lower())
+        tbl_words = [w for w in tbl_words if len(w) >= 3]
+        for tw in tbl_words:
+            if tw in name_lower:
+                return row
+
+    return None
+
+
+def _packaging_row_to_dict(row) -> dict | None:
+    """Конвертирует строку БД в dict упаковки; возвращает None если pack_size <= 0."""
+    rd = dict(row)
+    u = _normalize_ingredient_unit(rd.get("unit") or "г")
+    try:
+        sz = float(rd.get("default_pack_size") or 0)
+    except (TypeError, ValueError):
+        sz = 0.0
+    try:
+        avg_rub = float(rd.get("avg_price_per_pack_rub") or 0)
+    except (TypeError, ValueError):
+        avg_rub = 0.0
+    if sz <= 0:
+        return None
+    return {"unit": u, "default_pack_size": sz, "avg_price_per_pack_rub": avg_rub}
+
+
 def get_packaging(conn, product_name: str) -> dict:
     """
     Типичная упаковка и средняя цена за неё в РФ: из кэша product_packaging или один запрос к LLM.
+    Порядок поиска:
+      1. Точное совпадение по canonical key
+      2. Нечёткий поиск по словам (LIKE) — находит «овсянка сухая» по «овсяные хлопья»
+      3. LLM-запрос с записью в кэш
     Возвращает { unit, default_pack_size, avg_price_per_pack_rub }.
     При ошибке — безопасные значения (г, 500, цена 0 → дальше эвристика в корзине).
     """
@@ -381,33 +445,23 @@ def get_packaging(conn, product_name: str) -> dict:
     if not key:
         return safe
     try:
+        # --- 1. Точное совпадение ---
         row = conn.execute(
             """SELECT unit, default_pack_size, avg_price_per_pack_rub
                FROM product_packaging WHERE product_name = ?""",
             (key,),
         ).fetchone()
+
+        # --- 2. Нечёткий поиск если точного нет ---
+        if not row:
+            row = _fuzzy_packaging_row(conn, product_name)
+
         if row:
-            rd = dict(row)
-            u = _normalize_ingredient_unit(rd.get("unit") or "г")
-            try:
-                sz = float(rd.get("default_pack_size") or 0)
-            except (TypeError, ValueError):
-                sz = 0.0
-            try:
-                avg_rub = float(rd.get("avg_price_per_pack_rub") or 0)
-            except (TypeError, ValueError):
-                avg_rub = 0.0
-            if sz > 0:
-                u2, sz2 = _normalize_retail_pack(product_name, u, sz)
-                if (u2, sz2) != (u, sz):
-                    conn.execute(
-                        """UPDATE product_packaging SET unit = ?, default_pack_size = ?,
-                           avg_price_per_pack_rub = NULL WHERE product_name = ?""",
-                        (u2, sz2, key),
-                    )
-                    return {"unit": u2, "default_pack_size": sz2, "avg_price_per_pack_rub": 0.0}
-                return {"unit": u, "default_pack_size": sz, "avg_price_per_pack_rub": avg_rub}
-            # Иначе: нет строки / неверный размер / в кэше упаковка без цены — один запрос к LLM и запись в БД
+            packed = _packaging_row_to_dict(row)
+            if packed:
+                u2, sz2 = _normalize_retail_pack(product_name, packed["unit"], packed["default_pack_size"])
+                return {"unit": u2, "default_pack_size": sz2, "avg_price_per_pack_rub": packed["avg_price_per_pack_rub"]}
+            # Строка есть, но pack_size <= 0 — идём в LLM
 
         escaped = (product_name or "").replace("'", "''")
         prompt = f"""Ты ориентируешься на типичные розничные сети России (Перекрёсток, Пятёрочка, Магнит, Лента и т.п.).
@@ -555,6 +609,7 @@ def build_shopping_list(week_plan: dict, user_id: int) -> dict:
                     "name": display_name,
                     "deficit": round(deficit, 3),
                     "unit": unit,
+                    "pack_unit": pu,          # единица упаковки (г/мл/шт)
                     "pack_size": ps,
                     "packs": packs,
                     "estimated_price_per_pack": round(est_per_pack, 2),
@@ -571,6 +626,7 @@ def build_shopping_list(week_plan: dict, user_id: int) -> dict:
                 continue
             pid = find_product_id(conn, name) or find_or_create_product(conn, name)
             u = str(it.get("unit") or "г").strip() or "г"
+            item_pu = str(it.get("pack_unit") or "г").strip() or "г"  # берём из item, не из внешнего scope
             deficit = float(it.get("deficit") or 0)
             ps = float(it.get("pack_size") or 0)
             packs = int(it.get("packs") or 0)
@@ -582,7 +638,7 @@ def build_shopping_list(week_plan: dict, user_id: int) -> dict:
                     is_purchased, skipped_in_trip, display_name, display_unit, pack_unit, pack_weight, packs, is_manual
                 ) VALUES (?, ?, ?, ?, ?, 0, 0, ?, ?, ?, ?, ?, 0)
                 """,
-                (int(user_id), pid, deficit, est_total, for_date, name, u, pu, ps, packs),
+                (int(user_id), pid, deficit, est_total, for_date, name, u, item_pu, ps, packs),
             )
 
         conn.commit()
