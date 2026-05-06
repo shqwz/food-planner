@@ -2,6 +2,82 @@ import { useCallback, useEffect, useMemo, useState } from "react";
 import { apiDelete, apiGet } from "../api/client";
 import { IconCloseSmall, IconSearch } from "../components/ui-icons";
 
+/** Ориентиры «низкий запас» по типу единицы (без единого числа вроде 200 для всех позиций). */
+const LOW_STOCK_GRAMS = 150;
+const LOW_STOCK_ML = 200;
+const LOW_STOCK_PIECES = 3;
+
+/**
+ * @returns {null | { label: string, title: string }} — бейдж только если нужно привлечь внимание
+ */
+function pantryLowStockBadge(amount, rawUnit) {
+  const n = Number(amount);
+  if (!Number.isFinite(n) || n <= 0) {
+    return {
+      label: "Пусто",
+      title: "Остаток нулевой или не указан — позиция не учитывается в запасе.",
+    };
+  }
+
+  const u = String(rawUnit || "г")
+    .trim()
+    .toLowerCase()
+    .replace(/\.$/, "");
+
+  const isMassG =
+    u === "г" || u === "гр" || u === "грамм" || u === "граммов" || u === "g" || u === "г." || u === "гр.";
+  const isMassKg = u === "кг" || u === "kg";
+  const isMl = u === "мл" || u === "ml";
+  const isL = u === "л" || u === "l";
+  const isPieces =
+    u === "шт" ||
+    u === "штук" ||
+    u === "штука" ||
+    u === "pcs" ||
+    u === "pc" ||
+    u.startsWith("шт");
+
+  let comparable = null;
+  let unitHint = "";
+
+  if (isMassG) {
+    comparable = n;
+    unitHint = `${LOW_STOCK_GRAMS} г`;
+  } else if (isMassKg) {
+    comparable = n * 1000;
+    unitHint = `${LOW_STOCK_GRAMS} г`;
+  } else if (isMl) {
+    comparable = n;
+    unitHint = `${LOW_STOCK_ML} мл`;
+  } else if (isL) {
+    comparable = n * 1000;
+    unitHint = `${LOW_STOCK_ML} мл`;
+  } else if (isPieces) {
+    if (n < LOW_STOCK_PIECES) {
+      return {
+        label: "Мало",
+        title: `Меньше ${LOW_STOCK_PIECES} шт. — при необходимости пополните запас.`,
+      };
+    }
+    return null;
+  } else {
+    return null;
+  }
+
+  if (comparable == null) return null;
+
+  const limit =
+    isMassG || isMassKg ? LOW_STOCK_GRAMS : LOW_STOCK_ML;
+  if (comparable < limit) {
+    return {
+      label: "Мало",
+      title: `Ориентировочно низкий остаток: меньше ${unitHint}. Точный порог подстраивается под единицу товара (не персонально под ваш рацион).`,
+    };
+  }
+
+  return null;
+}
+
 export default function PantryTab({ showToast, userId }) {
   const [query, setQuery] = useState("");
   const [products, setProducts] = useState([]);
@@ -104,15 +180,32 @@ export default function PantryTab({ showToast, userId }) {
         </div>
       ) : (
         <div className="card">
-          {filtered.map((p) => (
-            <div key={p.id} className="list-item">
-              <div style={{ flex: 1 }}>
-                <div style={{ fontWeight: 600 }}>{p.name}</div>
-                <div className="kpi">{p.amount} {p.unit} · {p.calories_per_100} ккал/100</div>
+          {filtered.map((p) => {
+            const stockBadge = pantryLowStockBadge(p.amount, p.unit);
+            return (
+              <div key={p.id} className="list-item">
+                <div style={{ flex: 1, minWidth: 0 }}>
+                  <div style={{ fontWeight: 600, lineHeight: 1.35 }}>
+                    {p.name}
+                    <span style={{ fontWeight: 500, color: "var(--c-text-secondary)" }}>
+                      {" "}
+                      ·{" "}
+                      {Number(p.amount) % 1 === 0 ? Math.round(Number(p.amount)) : p.amount}
+                      &nbsp;{p.unit}
+                    </span>
+                  </div>
+                </div>
+                {stockBadge ? (
+                  <span
+                    className={`badge${stockBadge.label === "Пусто" ? " badge--empty" : " badge--warn"}`}
+                    title={stockBadge.title}
+                  >
+                    {stockBadge.label}
+                  </span>
+                ) : null}
               </div>
-              <span className="badge">{Number(p.amount) > 200 ? "Есть" : "Мало"}</span>
-            </div>
-          ))}
+            );
+          })}
         </div>
       )}
 

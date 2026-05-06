@@ -278,7 +278,6 @@ export default function PlanTab({ showToast, userId }) {
         </div>
         <div className="plan-day-rail" role="tablist" aria-label="Дни в окне плана">
           {days.map((d, i) => {
-            const isToday = d.plan_date === todayMsk;
             return (
               <button
                 key={d.plan_date}
@@ -286,7 +285,7 @@ export default function PlanTab({ showToast, userId }) {
                 role="tab"
                 aria-selected={i === activeIdx}
                 aria-label={formatPlanHeader(d.plan_date)}
-                className={`plan-day-node${i === activeIdx ? " plan-day-node--active" : ""}${d.exists ? " plan-day-node--has" : " plan-day-node--empty"}${isToday ? " plan-day-node--today" : ""}`}
+                className={`plan-day-node${i === activeIdx ? " plan-day-node--active" : ""}${d.exists ? " plan-day-node--has" : " plan-day-node--empty"}`}
                 onClick={() => setActiveIdx(i)}
               >
                 <span className="plan-day-node__num" aria-hidden>

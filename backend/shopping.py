@@ -112,6 +112,34 @@ def get_shopping_cart():
     })
 
 
+@shopping_bp.route("/api/shopping/trip-begin", methods=["POST"])
+def shopping_trip_begin():
+    """
+    Перед режимом магазина: все строки в «ещё не отмечено купил» (skipped_in_trip=1).
+    Пользователь проходит список и нажимает «Купил» (сбрасывает флаг); «Вернуть» — снова в ожидание.
+    """
+    data = request.get_json(force=True, silent=True) or {}
+    user_id = data.get("user_id")
+    if not user_id:
+        return jsonify({"error": "user_id обязателен"}), 400
+
+    conn = get_db()
+    try:
+        internal_user_id = resolve_user_id(conn, user_id)
+    except NotFoundError as e:
+        conn.close()
+        return jsonify({"error": str(e)}), 404
+
+    cur = conn.execute(
+        "UPDATE shopping_list SET skipped_in_trip = 1 WHERE user_id = ?",
+        (internal_user_id,),
+    )
+    conn.commit()
+    updated = cur.rowcount
+    conn.close()
+    return jsonify({"status": "ok", "updated": updated})
+
+
 @shopping_bp.route("/api/shopping/build", methods=["POST"])
 def build_shopping():
     """Собрать / пересобрать корзину из плана на N дней (дефолт 2)."""
@@ -254,7 +282,7 @@ def add_manual_shopping_item():
         """INSERT INTO shopping_list (
             user_id, product_id, amount_needed, estimated_cost, for_date,
             is_purchased, skipped_in_trip, display_name, display_unit, is_manual
-        ) VALUES (?,?,?,?,?,0,0,?,?,1)""",
+        ) VALUES (?,?,?,?,?,0,1,?,?,1)""",
         (
             internal_user_id,
             pid,
@@ -349,7 +377,7 @@ def complete_shopping_trip():
 
     if reds:
         resp["message"] = (
-            "Есть позиции «не купил». Автоматический пересчёт плана будет в следующей версии — "
+            "Есть позиции без отметки «Купил» (не попадут в кладовую). Автоматический пересчёт плана будет в следующей версии — "
             "пока отрегулируй меню или кладовую вручную."
         )
         if confirm_replan:

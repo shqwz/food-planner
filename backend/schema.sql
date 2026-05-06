@@ -134,7 +134,7 @@ CREATE TABLE IF NOT EXISTS shopping_list (
     estimated_cost REAL DEFAULT 0,
     for_date TEXT NOT NULL,           -- на какой день нужно
     is_purchased BOOLEAN DEFAULT 0,
-    skipped_in_trip INTEGER DEFAULT 0, -- 1 = «не купил» в режиме закупки
+    skipped_in_trip INTEGER DEFAULT 0, -- 1 = в поездке не отмечено «купил» (ещё в очереди); 0 = отмечено купил → в кладовую при «Завершить»
     display_name TEXT,
     display_unit TEXT,
     pack_unit TEXT,

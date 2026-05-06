@@ -168,16 +168,6 @@ export default function DiaryTab({ showToast, userId }) {
     return { ...GOAL };
   }, [todayPlan]);
 
-  const remaining = useMemo(
-    () => ({
-      kcal: dayGoals.kcal - eaten.kcal,
-      protein: dayGoals.protein - eaten.protein,
-      fat: dayGoals.fat - eaten.fat,
-      carbs: dayGoals.carbs - eaten.carbs,
-    }),
-    [eaten, dayGoals],
-  );
-
   const diaryDate = diary.date || todayStr;
 
   const resetModal = () => {
@@ -429,7 +419,6 @@ export default function DiaryTab({ showToast, userId }) {
             <div className="macro-lab">Углеводы</div>
           </div>
         </div>
-        <div className="kpi">До цели: {Math.round(remaining.kcal)} ккал</div>
       </div>
       {error && (
         <div className="card" style={{ padding: 12, color: "var(--c-danger)" }}>{error}</div>
@@ -438,7 +427,6 @@ export default function DiaryTab({ showToast, userId }) {
       {!loading && todayPlan?.exists && sortedSlots.length > 0 ? (
         <>
           <div className="section-title">Меню на сегодня</div>
-          <p className="section-lead">Когда поел — жми «Отметить».</p>
           {sortedSlots.map(({ m, idx }) => {
             const logged = slotDiaryMatch[idx];
             return (

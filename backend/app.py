@@ -63,8 +63,7 @@ def get_pantry():
         return jsonify({"error": str(e)}), 404
 
     rows = conn.execute('''
-        SELECT p.id, pr.name, p.amount, pr.unit, pr.calories_per_100,
-               pr.protein_per_100, pr.fat_per_100, pr.carbs_per_100,
+        SELECT p.id, pr.name, p.amount, pr.unit,
                p.price_per_unit, p.expiry_date
         FROM pantry p
         JOIN products_ref pr ON p.product_id = pr.id
@@ -80,12 +79,8 @@ def get_pantry():
             "name": r["name"],
             "amount": r["amount"],
             "unit": r["unit"],
-            "calories_per_100": r["calories_per_100"],
-            "protein_per_100": r["protein_per_100"],
-            "fat_per_100": r["fat_per_100"],
-            "carbs_per_100": r["carbs_per_100"],
             "price_per_unit": r["price_per_unit"],
-            "expiry_date": r["expiry_date"]
+            "expiry_date": r["expiry_date"],
         })
 
     return jsonify(products)

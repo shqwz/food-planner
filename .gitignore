@@ -16,6 +16,9 @@ __pycache__/
 backend/food_planner.db
 *.db
 
+# --- AI request traces (local / bind-mounted from Docker) ---
+backend/ai_trace/*.jsonl
+
 # --- Node / frontend ---
 node_modules/
 frontend/node_modules/

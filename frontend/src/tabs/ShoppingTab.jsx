@@ -111,10 +111,9 @@ export default function ShoppingTab({ showToast, userId }) {
   const overBudget = typeof remainder === "number" && remainder < 0;
 
   const headline = useMemo(() => {
-    if (mode === "trip") return "В магазине";
     const range = fmtRangeHeading(dates);
     return range ? `Список покупок · ${range}` : "Список покупок";
-  }, [mode, dates]);
+  }, [dates]);
 
   const run = async (fn) => {
     setLoading(true);
@@ -142,6 +141,13 @@ export default function ShoppingTab({ showToast, userId }) {
         showToast("Список пуст: для этих дней нечего покупать или нет плана.", "neutral");
       }
       setMode("view");
+    });
+
+  const startShoppingTrip = () =>
+    run(async () => {
+      await apiPost("/api/shopping/trip-begin", { user_id: userId });
+      await loadCart({ silent: true });
+      setMode("trip");
     });
 
   const toggleSkip = (item) => {
@@ -218,19 +224,19 @@ export default function ShoppingTab({ showToast, userId }) {
 
   return (
     <div className={`content${mode === "trip" ? " content--shopping-trip" : ""}`}>
-      <div className={`card${mode === "trip" ? " shopping-trip-topcard" : ""}`} style={{ padding: 16 }}>
-        <div style={{ fontWeight: 800, fontSize: 18, marginBottom: 8 }}>{headline}</div>
-        {mode === "view" && dates.length > 0 && !cart?.empty && (
-          <p className="muted" style={{ fontSize: 13, lineHeight: 1.45, margin: "0 0 12px" }}>
-            Даты ниже — из плана. Пересборка заменяет весь список.
-          </p>
-        )}
-        {isCartFetching && (
-          <p className="muted" style={{ fontSize: 14, margin: "0 0 12px" }}>
-            Загрузка списка…
-          </p>
-        )}
-        {mode === "view" && (
+      {mode === "view" ? (
+        <div className="card" style={{ padding: 16 }}>
+          <div style={{ fontWeight: 800, fontSize: 18, marginBottom: 10 }}>{headline}</div>
+          {dates.length > 0 && !cart?.empty && (
+            <p className="muted" style={{ fontSize: 13, lineHeight: 1.45, margin: "0 0 12px" }}>
+              Даты ниже — из плана. Пересборка заменяет весь список.
+            </p>
+          )}
+          {isCartFetching && (
+            <p className="muted" style={{ fontSize: 14, margin: "0 0 12px" }}>
+              Загрузка списка…
+            </p>
+          )}
           <div className="cart-window-field">
             <span className="cart-window-label" id="cart-window-label">
               Дней из плана
@@ -252,13 +258,11 @@ export default function ShoppingTab({ showToast, userId }) {
               ))}
             </div>
           </div>
-        )}
 
-        {error && (
-          <div style={{ color: "var(--c-danger)", fontSize: 14, marginBottom: 8 }}>{error}</div>
-        )}
+          {error && (
+            <div style={{ color: "var(--c-danger)", fontSize: 14, marginBottom: 8 }}>{error}</div>
+          )}
 
-        {mode === "view" && (
           <button
             type="button"
             className={cart?.empty ? "pill-btn pill-btn-primary" : "pill-btn pill-btn-ghost"}
@@ -268,8 +272,19 @@ export default function ShoppingTab({ showToast, userId }) {
           >
             Пересобрать из плана
           </button>
-        )}
-      </div>
+        </div>
+      ) : (
+        <>
+          {isCartFetching && (
+            <p className="muted" style={{ fontSize: 14, margin: "0 0 12px 16px" }}>
+              Загрузка списка…
+            </p>
+          )}
+          {error && (
+            <div style={{ color: "var(--c-danger)", fontSize: 14, margin: "0 16px 8px" }}>{error}</div>
+          )}
+        </>
+      )}
 
       {cart?.empty && !error && (
         <>
@@ -295,7 +310,12 @@ export default function ShoppingTab({ showToast, userId }) {
                 На <strong>{fmtDay(d)}</strong>
               </div>
               <div className={`card${mode === "trip" ? " shopping-trip-day-card" : ""}`} style={{ padding: 0 }}>
-                {(grouped[d] || []).map((item) => (
+                {(mode === "trip"
+                  ? [...(grouped[d] || [])].sort(
+                      (a, b) => Number(b.skipped_in_trip) - Number(a.skipped_in_trip),
+                    )
+                  : grouped[d] || []
+                ).map((item) => (
                   <ShoppingRow
                     key={item.id}
                     item={item}
@@ -330,7 +350,6 @@ export default function ShoppingTab({ showToast, userId }) {
             boxShadow: overBudget ? "0 0 0 1px color-mix(in srgb, var(--c-danger) 35%, transparent)" : undefined,
           }}
         >
-          <div className="kpi">{mode === "trip" ? "К покупке (оценка)" : "Итого по списку (оценка)"}</div>
           <div style={{ fontSize: 22, fontWeight: 800, marginBottom: 8 }}>
             {ruMoney(mode === "trip" ? tripTotal : viewTotal)}
           </div>
@@ -361,7 +380,7 @@ export default function ShoppingTab({ showToast, userId }) {
           className="pill-btn pill-btn-primary"
           style={{ width: "100%", marginTop: 14 }}
           disabled={loading}
-          onClick={() => setMode("trip")}
+          onClick={startShoppingTrip}
         >
           Режим магазина
         </button>
@@ -405,7 +424,7 @@ export default function ShoppingTab({ showToast, userId }) {
             <div className="modal-head">
               <div className="modal-head-text">
                 <h2 className="modal-title modal-title--notice" id="replan-modal-title">
-                  Не куплено
+                  Без «Купил»
                 </h2>
               </div>
               <button type="button" className="modal-close" onClick={() => setReplanModal(null)} aria-label="Закрыть">
@@ -459,8 +478,8 @@ function ShoppingRow({ item, mode, onToggleSkip, onEdit }) {
 
       {mode === "trip" && (
         <div className="shopping-trip-row__actions">
-          <button type="button" className="pill-btn pill-btn-ghost shopping-trip-btn-notake" onClick={onToggleSkip}>
-            {skipped ? "Вернуть" : "Не взял"}
+          <button type="button" className="pill-btn shopping-trip-btn-buy" onClick={onToggleSkip}>
+            {skipped ? "Купил" : "Вернуть"}
           </button>
           <button type="button" className="pill-btn pill-btn-ghost shopping-trip-btn-edit" onClick={onEdit}>
             Изменить
