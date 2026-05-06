@@ -7,6 +7,7 @@ from config import openrouter_api_key
 from database import get_db
 from dates_util import today_msk_iso
 from services import find_or_create_product, find_product_id
+from ingredient_exclude import is_non_purchasable_tap_water
 from shopping_service import default_price_per_reference_unit, estimate_line_cost, pantry_price_hint
 
 OPENROUTER_URL = "https://openrouter.ai/api/v1/chat/completions"
@@ -337,6 +338,7 @@ def generate_weekly_plan(user_data: dict, products: list) -> dict:
 14. Поле ingredients — только покупные СЫРЫЕ/до готовки позиции, как в корзине: «гречка сухая», «рис сухой», «куриная грудка», «кефир 1%», «морковь», «яблоко».
     НЕ пиши «варёная гречка», «отварная/тушёная курица», «готовый гарнир» и т.п.; не подставляй готовое блюдо одной строкой вместо продуктов.
     Количество — до приготовления: например сухая гречка 50 г (не масса уже сваренной порции крупы).
+    Не включай «воду» / кипяток / водопроводную воду как ингредиент для покупки (её берут из крана или готовят крупы без отдельной строки воды в корзине). Минеральную и газированную воду можно указывать, если она действительно в рационе.
 
 Верни строго JSON:
 {{
@@ -725,6 +727,7 @@ def analyze_meal_description(description: str) -> dict:
 
 В списке ingredients указывай только покупные продукты «как в магазине», до приготовления
 («гречка сухая», «куриная грудка», а не «варёная гречка» / «отварная курица»); массы и объёмы — сырые ингредиенты до готовки.
+Воду из крана / кипяток в ingredients не указывай (минеральную или газированную — можно, если речь о покупной).
 
 Описание: "{description}"
 
@@ -766,6 +769,7 @@ def adjust_remaining_meals(consumed_today: dict, remaining_targets: dict, availa
 
 Предложи изменённые оставшиеся приёмы для компенсации отклонений.
 В каждом приёме поле ingredients — только сырые/магазинные названия до готовки (гречка сухая, куриная грудка, рис сухой и т.д.), не отварное/варёное состояние.
+Крановую воду и кипяток в список не включай.
 
 Верни строго JSON:
 {{

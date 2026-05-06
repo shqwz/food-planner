@@ -3,6 +3,7 @@ from database import get_db
 from datetime import datetime
 from collections import defaultdict
 import json
+from ingredient_exclude import is_non_purchasable_tap_water
 from services import resolve_user_id, find_product_id, NotFoundError
 
 diary_bp = Blueprint("diary", __name__)
@@ -19,6 +20,8 @@ def _aggregate_planned_needs(conn, ingredients: list) -> tuple[dict[int, float],
         if amt <= _EPS:
             continue
         raw = (ing.get("name") or "").strip()
+        if is_non_purchasable_tap_water(raw):
+            continue
         pid = find_product_id(conn, raw) if raw else None
         if not pid:
             return {}, {}, f'Продукт «{raw or "?"}» не найден в справочнике. Добавьте его на склад или отметьте приём иначе.'
@@ -97,11 +100,16 @@ def _apply_planned_pantry_and_reservations(
 def _aggregate_meal_totals(ingredients: list, meal_totals_fallback: dict | None) -> dict:
     """Суммы по строкам ингредиентов; если все нули — берём переданный снимок блюда (как из плана)."""
     meal_totals_fallback = meal_totals_fallback or {}
-    kcal = sum(float(i.get("kcal") or 0) for i in ingredients)
-    protein = sum(float(i.get("protein") or 0) for i in ingredients)
-    fat = sum(float(i.get("fat") or 0) for i in ingredients)
-    carbs = sum(float(i.get("carbs") or 0) for i in ingredients)
-    cost = sum(float(i.get("cost") or 0) for i in ingredients)
+    countable = [
+        i
+        for i in ingredients
+        if not is_non_purchasable_tap_water((i.get("name") or "").strip())
+    ]
+    kcal = sum(float(i.get("kcal") or 0) for i in countable)
+    protein = sum(float(i.get("protein") or 0) for i in countable)
+    fat = sum(float(i.get("fat") or 0) for i in countable)
+    carbs = sum(float(i.get("carbs") or 0) for i in countable)
+    cost = sum(float(i.get("cost") or 0) for i in countable)
     if kcal > 0 or protein > 0 or fat > 0 or carbs > 0:
         return {
             "kcal": kcal,

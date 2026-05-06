@@ -7,6 +7,7 @@ from services import resolve_user_id, find_product_id, NotFoundError
 from planner_engine import build_planning_context
 from shopping_service import rebuild_shopping_list
 from dates_util import today_msk, today_msk_iso, parse_iso_date, iso, add_days
+from ingredient_exclude import is_non_purchasable_tap_water
 
 plan_bp = Blueprint("plan", __name__)
 
@@ -81,7 +82,10 @@ def _persist_one_day(
     )
     for meal in meals:
         for ing in meal.get("ingredients", []):
-            product_id = find_product_id(conn, ing["name"])
+            nm = ing.get("name") or ""
+            if is_non_purchasable_tap_water(nm):
+                continue
+            product_id = find_product_id(conn, nm)
             if product_id:
                 conn.execute(
                     """

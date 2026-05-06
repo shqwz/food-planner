@@ -9,6 +9,7 @@ from collections import defaultdict
 from datetime import datetime, timedelta
 
 from dates_util import today_msk, today_msk_iso
+from ingredient_exclude import is_non_purchasable_tap_water
 from services import find_or_create_product
 
 
@@ -147,7 +148,7 @@ def aggregate_shopping_window(conn, internal_user_id: int, days: int) -> dict | 
         for meal in meals:
             for ing in meal.get("ingredients", []):
                 raw = (ing.get("name") or "").strip()
-                if not raw:
+                if not raw or is_non_purchasable_tap_water(raw):
                     continue
                 pid = find_or_create_product(conn, raw)
                 amt = float(ing.get("amount") or 0)
