@@ -1,9 +1,10 @@
 from flask import Blueprint, request, jsonify
 from database import get_db
-from datetime import datetime
+from datetime import datetime, timedelta
 from collections import defaultdict
 import json
 from ingredient_exclude import is_non_purchasable_tap_water
+from dates_util import today_msk_iso
 from services import resolve_user_id, find_product_id, NotFoundError
 
 diary_bp = Blueprint("diary", __name__)
@@ -312,6 +313,46 @@ def get_history():
 
     conn.close()
     return jsonify([dict(r) for r in rows])
+
+
+@diary_bp.route("/api/diary/streak", methods=["GET"])
+def get_diary_streak():
+    """Текущий стрик по дням: минимум 1 отмеченный приём в день."""
+    user_id = request.args.get("user_id")
+    if not user_id:
+        return jsonify({"error": "user_id обязателен"}), 400
+
+    conn = get_db()
+    try:
+        internal_user_id = resolve_user_id(conn, user_id)
+    except NotFoundError as e:
+        conn.close()
+        return jsonify({"error": str(e)}), 404
+
+    rows = conn.execute(
+        """
+        SELECT DISTINCT plan_date
+        FROM consumed_meals
+        WHERE user_id = ? AND plan_date IS NOT NULL AND TRIM(plan_date) <> ''
+        ORDER BY plan_date DESC
+        """,
+        (internal_user_id,),
+    ).fetchall()
+    conn.close()
+
+    marked_days = {str(r["plan_date"]) for r in rows if r["plan_date"]}
+    today = today_msk_iso()
+
+    if today not in marked_days:
+        return jsonify({"streak_days": 0, "active": False, "today": today})
+
+    streak = 0
+    cursor = datetime.strptime(today, "%Y-%m-%d").date()
+    while cursor.isoformat() in marked_days:
+        streak += 1
+        cursor -= timedelta(days=1)
+
+    return jsonify({"streak_days": streak, "active": streak > 0, "today": today})
 
 
 @diary_bp.route("/api/measurements", methods=["GET"])

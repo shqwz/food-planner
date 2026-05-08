@@ -78,6 +78,10 @@ body {
 
 .topbar-title { font-size: 17px; font-weight: 600; letter-spacing: -0.3px; }
 .topbar-sub { font-size: 12px; color: var(--c-text-secondary); margin-top: 1px; }
+.topbar-meta {
+  display: flex;
+  flex-direction: column;
+}
 .topbar-actions { display: flex; gap: 8px; align-items: center; }
 
 .icon-btn {
@@ -310,11 +314,22 @@ body {
   padding: 0 2px;
 }
 .planned-meal-slot {
+  --meal-accent: var(--c-accent);
   padding: 14px 16px;
   display: flex;
   flex-direction: column;
   gap: 8px;
+  border-left: 4px solid var(--meal-accent);
+  background: var(--c-surface);
 }
+.planned-meal-slot[data-meal-type="breakfast"] { --meal-accent: #b58b00; }
+.planned-meal-slot[data-meal-type="lunch"] { --meal-accent: #4a7396; }
+.planned-meal-slot[data-meal-type="snack"] { --meal-accent: #a85a32; }
+.planned-meal-slot[data-meal-type="dinner"] { --meal-accent: #7a5aa6; }
+html[data-theme="dark"] .planned-meal-slot[data-meal-type="breakfast"] { --meal-accent: #d4a726; }
+html[data-theme="dark"] .planned-meal-slot[data-meal-type="lunch"] { --meal-accent: #6c9dbf; }
+html[data-theme="dark"] .planned-meal-slot[data-meal-type="snack"] { --meal-accent: #d4875e; }
+html[data-theme="dark"] .planned-meal-slot[data-meal-type="dinner"] { --meal-accent: #9b7cc9; }
 .planned-meal-slot-top {
   display: flex;
   align-items: baseline;
@@ -326,7 +341,7 @@ body {
   font-weight: 700;
   text-transform: uppercase;
   letter-spacing: 0.06em;
-  color: var(--c-accent);
+  color: var(--meal-accent);
 }
 .planned-meal-time {
   font-size: 13px;
@@ -348,6 +363,10 @@ body {
 }
 .planned-meal-cta {
   margin-top: 4px;
+  align-self: center;
+}
+.pill-btn.pill-btn-primary.planned-meal-cta {
+  width: min(220px, 100%);
 }
 .planned-meal-cta--secondary {
   margin-top: 6px;
@@ -711,8 +730,46 @@ html[data-theme="dark"] .cart-window-day--active {
   flex-wrap: wrap;
   gap: 6px;
 }
-.plan-day-picker__menu {
+.plan-day-picker__streak {
   flex-shrink: 0;
+  display: inline-flex;
+  align-items: center;
+  gap: 4px;
+  font-size: 17px;
+  font-weight: 1000;
+  color: var(--c-text-secondary);
+  font-variant-numeric: tabular-nums;
+}
+.plan-day-picker__streak-fire {
+  width: 25px;
+  height: 25px;
+  display: inline-block;
+  background-image: url("/fire_icon_on.png");
+  background-size: contain;
+  background-position: center;
+  background-repeat: no-repeat;
+  filter: grayscale(1);
+  opacity: 0.45;
+  transform: translateY(-1.5px);
+}
+.plan-day-picker__streak-days {
+  font-weight: 900;
+  letter-spacing: -0.01em;
+}
+.plan-day-picker__streak--active {
+  color: #b85c2a;
+}
+.plan-day-picker__streak--active .plan-day-picker__streak-fire {
+  filter: none;
+  opacity: 1;
+}
+.plan-day-picker__streak--inactive {
+  color: var(--c-text-tertiary);
+}
+.plan-day-picker__streak--inactive .plan-day-picker__streak-fire {
+  /* Приводим иконку к тому же серому тону, что и цифра */
+  filter: grayscale(1) saturate(0) brightness(0.72);
+  opacity: 0.78;
 }
 .plan-day-picker__weekday {
   margin: 0;
@@ -1394,6 +1451,150 @@ html[data-theme="dark"] .plan-meal-card--breakfast .plan-meal-card__kcal {
   font-weight: 600;
   line-height: 1.35;
 }
+
+/* Мини-календарь в модалке плана */
+.plan-mini-cal-wrap {
+  margin-top: 14px;
+  animation: plan-cal-in 0.28s ease-out;
+}
+@keyframes plan-cal-in {
+  from {
+    opacity: 0;
+    transform: translateY(6px);
+  }
+  to {
+    opacity: 1;
+    transform: translateY(0);
+  }
+}
+.plan-mini-cal-label {
+  margin-bottom: 10px;
+  color: var(--c-text-secondary);
+}
+.plan-mini-cal {
+  padding: 14px 12px 12px;
+  border-radius: var(--r-lg);
+  border: 1px solid var(--c-border-mid);
+  background: linear-gradient(
+    165deg,
+    color-mix(in srgb, var(--c-surface2) 92%, var(--c-accent) 8%) 0%,
+    var(--c-surface2) 48%,
+    var(--c-surface) 100%
+  );
+  box-shadow: 0 1px 0 color-mix(in srgb, var(--c-accent) 12%, transparent);
+}
+.plan-mini-cal__toolbar {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 10px;
+  margin-bottom: 12px;
+}
+.plan-mini-cal__title {
+  font-size: 15px;
+  font-weight: 700;
+  letter-spacing: -0.3px;
+  color: var(--c-text-primary);
+  flex: 1;
+  text-align: center;
+}
+.plan-mini-cal__nav {
+  flex-shrink: 0;
+  width: 40px;
+  height: 40px;
+  border: none;
+  border-radius: var(--r-md);
+  background: var(--c-surface);
+  color: var(--c-text-primary);
+  font-size: 22px;
+  line-height: 1;
+  cursor: pointer;
+  font-family: var(--font);
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  transition: background 0.15s ease, transform 0.12s ease;
+  border: 0.5px solid var(--c-border);
+}
+.plan-mini-cal__nav:hover {
+  background: var(--c-accent-light);
+  color: var(--c-accent);
+  border-color: color-mix(in srgb, var(--c-accent) 30%, transparent);
+}
+.plan-mini-cal__nav:active {
+  transform: scale(0.96);
+}
+.plan-mini-cal__weekdays {
+  display: grid;
+  grid-template-columns: repeat(7, 1fr);
+  gap: 4px;
+  margin-bottom: 8px;
+  padding: 0 2px;
+}
+.plan-mini-cal__wd {
+  text-align: center;
+  font-size: 11px;
+  font-weight: 700;
+  letter-spacing: 0.04em;
+  text-transform: uppercase;
+  color: var(--c-text-tertiary);
+}
+.plan-mini-cal__grid {
+  display: grid;
+  grid-template-columns: repeat(7, 1fr);
+  gap: 5px;
+}
+.plan-mini-cal__cell {
+  position: relative;
+  aspect-ratio: 1;
+  min-height: 40px;
+  max-height: 48px;
+  padding: 0;
+  border: none;
+  border-radius: 12px;
+  background: transparent;
+  color: var(--c-text-primary);
+  font-family: var(--font);
+  font-size: 14px;
+  font-weight: 600;
+  cursor: pointer;
+  transition: background 0.15s ease, color 0.15s ease, transform 0.12s ease, box-shadow 0.15s ease;
+}
+.plan-mini-cal__cell:hover {
+  background: color-mix(in srgb, var(--c-accent) 14%, transparent);
+}
+.plan-mini-cal__cell:focus {
+  outline: none;
+  box-shadow: 0 0 0 2px var(--c-accent-light);
+}
+.plan-mini-cal__cell--mute {
+  color: var(--c-text-tertiary);
+  font-weight: 500;
+  opacity: 0.72;
+}
+.plan-mini-cal__cell--mute:hover {
+  background: color-mix(in srgb, var(--c-text-tertiary) 10%, transparent);
+}
+.plan-mini-cal__cell--today:not(.plan-mini-cal__cell--selected) {
+  box-shadow: inset 0 0 0 2px var(--c-accent);
+  color: var(--c-accent);
+}
+.plan-mini-cal__cell--selected {
+  background: var(--c-accent);
+  color: #fff;
+  box-shadow: 0 2px 10px color-mix(in srgb, var(--c-accent) 40%, transparent);
+}
+.plan-mini-cal__cell--selected:hover {
+  background: color-mix(in srgb, var(--c-accent) 88%, #000 12%);
+  color: #fff;
+}
+html[data-theme="dark"] .plan-mini-cal__cell--selected {
+  color: var(--c-surface);
+}
+html[data-theme="dark"] .plan-mini-cal__cell--selected:hover {
+  color: var(--c-surface);
+}
+
 .preview-dish-title {
   font-size: 16px;
   font-weight: 700;

@@ -46,6 +46,21 @@ def _clear_reservations_for_dates(conn, internal_user_id: int, dates_iso: list[s
     )
 
 
+def _clear_planned_diary_marks_for_dates(conn, internal_user_id: int, dates_iso: list[str]):
+    """
+    При перегенерации плана на даты нужно сбрасывать только «плановые» отметки в дневнике,
+    чтобы пользователь отмечал новый план заново.
+    Свободные записи (вне плана) не трогаем.
+    """
+    if not dates_iso:
+        return
+    ph = ",".join("?" * len(dates_iso))
+    conn.execute(
+        f"DELETE FROM consumed_meals WHERE user_id = ? AND plan_date IN ({ph}) AND was_planned = 1",
+        [internal_user_id, *dates_iso],
+    )
+
+
 def _persist_one_day(
     conn,
     *,
@@ -215,6 +230,7 @@ def generate_plan():
     dates_iso, indices = _build_dates_to_write(period, start_from_raw)
     conn = get_db()
     _clear_reservations_for_dates(conn, internal_user_id, dates_iso)
+    _clear_planned_diary_marks_for_dates(conn, internal_user_id, dates_iso)
 
     explanations_by_date = {x["date"]: x["why"] for x in algorithm_context.get("explanations", [])}
     targets_by_date = {x["date"]: x for x in algorithm_context.get("daily_targets", [])}

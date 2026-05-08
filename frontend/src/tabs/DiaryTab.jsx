@@ -20,6 +20,16 @@ function round1(n) {
   return Math.round(Number(n) * 10) / 10;
 }
 
+/** Календарная дата «сегодня» в МСК — как у плана и /api/diary/streak */
+function mskTodayIso() {
+  return new Intl.DateTimeFormat("sv-SE", {
+    timeZone: "Europe/Moscow",
+    year: "numeric",
+    month: "2-digit",
+    day: "2-digit",
+  }).format(new Date());
+}
+
 function scalePlannedMeal(meal, pct) {
   const f = pct / 100;
   const ingredients = (meal.ingredients || []).map((i) => ({
@@ -126,7 +136,7 @@ export default function DiaryTab({ showToast, userId }) {
   const [submitting, setSubmitting] = useState(false);
   const [showHistory, setShowHistory] = useState(false);
 
-  const todayStr = useMemo(() => new Date().toISOString().slice(0, 10), []);
+  const todayStr = mskTodayIso();
 
   const refreshDiary = useCallback(async () => {
     const data = await apiGet("/api/diary", { user_id: userId, date: todayStr });
@@ -429,9 +439,11 @@ export default function DiaryTab({ showToast, userId }) {
           <div className="section-title">Меню на сегодня</div>
           {sortedSlots.map(({ m, idx }) => {
             const logged = slotDiaryMatch[idx];
+            const mealType = (m.type || "snack").toLowerCase();
             return (
               <div
                 className={`card planned-meal-slot ${logged ? "planned-meal-slot--logged" : ""}`}
+                data-meal-type={mealType}
                 key={`${idx}-${m.type}-${m.dish_name || ""}`}
               >
                 <div className="planned-meal-slot-top">
@@ -440,7 +452,7 @@ export default function DiaryTab({ showToast, userId }) {
                 </div>
                 <div className="planned-meal-dish">{m.dish_name || "Блюдо"}</div>
                 <div className="planned-meal-meta">
-                  В меню ~{Math.round(m.total_kcal || 0)} ккал
+                  ~{Math.round(m.total_kcal || 0)} ккал
                   {m.total_protein != null ? ` · Б ${Math.round(m.total_protein)}г` : ""}
                 </div>
                 {logged ? (

@@ -49,7 +49,6 @@ export default function App() {
           weekday: "long",
           day: "numeric",
           month: "long",
-          year: "numeric",
         })
         .replace(/^./, (ch) => ch.toUpperCase()),
     [],
@@ -150,7 +149,7 @@ export default function App() {
   return (
     <div className="app">
       <header className="topbar">
-        <div>
+        <div className="topbar-meta">
           <div className="topbar-title">
             {activeTab === "plan"
               ? "Сегодня"
@@ -191,6 +190,7 @@ export default function App() {
 
       {showProfile && profile?.exists && (
         <ProfileScreen
+          userId={user.telegramId}
           profile={profile}
           onClose={() => setShowProfile(false)}
           onEdit={() => {

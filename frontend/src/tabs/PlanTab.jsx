@@ -1,7 +1,6 @@
 import { useCallback, useEffect, useState } from "react";
 import { apiGet, apiPost } from "../api/client";
 import PlanMenuModal from "./PlanMenuModal";
-import { IconMoreHorizontal } from "../components/ui-icons";
 
 const MEAL_LABEL = {
   breakfast: "Завтрак",
@@ -9,9 +8,6 @@ const MEAL_LABEL = {
   dinner: "Ужин",
   snack: "Перекус",
 };
-
-/** Цель по калориям/БЖУ, если на дату нет строки плана в БД */
-const FALLBACK_DAY_GOALS = { kcal: 2100, protein: 140, fat: 70, carbs: 230 };
 
 function parseMealTime(m) {
   const raw = (m && m.time) || "12:00";
@@ -86,7 +82,7 @@ export default function PlanTab({ showToast, userId }) {
   const [menuOpen, setMenuOpen] = useState(false);
   const [extendDismissed, setExtendDismissed] = useState(false);
   const [generateBusy, setGenerateBusy] = useState(false);
-  const [diaryTotals, setDiaryTotals] = useState({ kcal: 0, protein: 0, fat: 0, carbs: 0 });
+  const [streakDays, setStreakDays] = useState(0);
 
   const loadWindow = useCallback(async () => {
     setError("");
@@ -117,22 +113,22 @@ export default function PlanTab({ showToast, userId }) {
   }, [loadWindow]);
 
   useEffect(() => {
-    if (loading || userId == null || userId === "" || !days.length) return;
-    const cur = days[activeIdx] || {};
-    const date = cur.plan_date || mskTodayIso();
+    if (userId == null || userId === "") {
+      setStreakDays(0);
+      return;
+    }
     let cancelled = false;
-    setDiaryTotals({ kcal: 0, protein: 0, fat: 0, carbs: 0 });
-    apiGet("/api/diary", { user_id: userId, date: date })
+    apiGet("/api/diary/streak", { user_id: userId })
       .then((payload) => {
-        if (!cancelled) setDiaryTotals(payload.totals || { kcal: 0, protein: 0, fat: 0, carbs: 0 });
+        if (!cancelled) setStreakDays(Math.max(0, Number(payload?.streak_days) || 0));
       })
       .catch(() => {
-        if (!cancelled) setDiaryTotals({ kcal: 0, protein: 0, fat: 0, carbs: 0 });
+        if (!cancelled) setStreakDays(0);
       });
     return () => {
       cancelled = true;
     };
-  }, [userId, activeIdx, days, loading]);
+  }, [userId]);
 
   const current = days[activeIdx] || {};
   const anchorDate = current.plan_date || mskTodayIso();
@@ -166,9 +162,7 @@ export default function PlanTab({ showToast, userId }) {
   const handleMenuConfirm = async ({ period, start_from }) => {
     try {
       const body = { period };
-      if (period === "week") {
-        // сервер: неделя от завтра (МСК), если не передать start_from
-      } else if (start_from) {
+      if (start_from) {
         body.start_from = start_from;
       }
       await runGenerate(body);
@@ -199,25 +193,8 @@ export default function PlanTab({ showToast, userId }) {
     );
   }
 
-  const daily = current.daily_totals || {};
   const meals = current.meals || [];
   const mealsSorted = sortMealsByTime(meals);
-
-  const eaten = {
-    kcal: Number(diaryTotals.kcal) || 0,
-    protein: Number(diaryTotals.protein) || 0,
-    fat: Number(diaryTotals.fat) || 0,
-    carbs: Number(diaryTotals.carbs) || 0,
-  };
-  const goals = current.exists
-    ? {
-        kcal: Math.max(1, Math.round(Number(daily.kcal) || FALLBACK_DAY_GOALS.kcal)),
-        protein: Math.max(1, Math.round(Number(daily.protein) || FALLBACK_DAY_GOALS.protein)),
-        fat: Math.max(1, Math.round(Number(daily.fat) || FALLBACK_DAY_GOALS.fat)),
-        carbs: Math.max(1, Math.round(Number(daily.carbs) || FALLBACK_DAY_GOALS.carbs)),
-      }
-    : FALLBACK_DAY_GOALS;
-  const kcalPct = Math.min(100, Math.round((eaten.kcal / goals.kcal) * 100));
 
   return (
     <div className="content">
@@ -266,15 +243,14 @@ export default function PlanTab({ showToast, userId }) {
               {!current.exists ? "Нет плана" : current.day_type === "training" ? "Тренировка" : "Отдых"}
             </span>
           </div>
-          <button
-            type="button"
-            className="icon-btn icon-btn--svg plan-day-picker__menu"
-            aria-label="Меню плана"
-            disabled={generateBusy}
-            onClick={() => setMenuOpen(true)}
+          <div
+            className={`plan-day-picker__streak${streakDays > 0 ? " plan-day-picker__streak--active" : " plan-day-picker__streak--inactive"}`}
+            title={streakDays > 0 ? `Стрик: ${streakDays} дн.` : "Стрик: 0"}
+            aria-label={`Стрик ${streakDays} дней`}
           >
-            <IconMoreHorizontal size={20} />
-          </button>
+            <span className="plan-day-picker__streak-fire" aria-hidden />
+            <span className="plan-day-picker__streak-days">{streakDays}</span>
+          </div>
         </div>
         <div className="plan-day-rail" role="tablist" aria-label="Дни в окне плана">
           {days.map((d, i) => {
@@ -298,51 +274,6 @@ export default function PlanTab({ showToast, userId }) {
         </div>
       </section>
 
-      <section
-        className="today-hero"
-        style={{ marginTop: 12 }}
-        aria-label={`Съедено по дневнику ${Math.round(eaten.kcal)} из ${goals.kcal} ккал`}
-      >
-        <div className="hero-title">
-          {Math.round(eaten.kcal)} из {goals.kcal} ккал
-        </div>
-        <p className="hero-kpi-note muted">Съедено по дневнику</p>
-        {(!current.exists || meals.length === 0) && (
-          <div className="hero-sub">
-            {!current.exists ? "Нет плана на эту дату" : "В плане нет приёмов"}
-          </div>
-        )}
-        <div className="progress-track">
-          <div className="progress-fill" style={{ width: `${kcalPct}%` }} />
-        </div>
-        <div className="macro-row">
-          {[
-            {
-              label: "Белки",
-              value: `${Math.round(eaten.protein)} / ${goals.protein}г`,
-              color: "var(--c-accent)",
-            },
-            {
-              label: "Жиры",
-              value: `${Math.round(eaten.fat)} / ${goals.fat}г`,
-              color: "var(--c-warn)",
-            },
-            {
-              label: "Углеводы",
-              value: `${Math.round(eaten.carbs)} / ${goals.carbs}г`,
-              color: "var(--c-accent2)",
-            },
-          ].map((m) => (
-            <div className="macro-pill" key={m.label}>
-              <div className="macro-val" style={{ color: m.color }}>
-                {m.value}
-              </div>
-              <div className="macro-lab">{m.label}</div>
-            </div>
-          ))}
-        </div>
-      </section>
-
       {error && (
         <div className="card" style={{ padding: 14, color: "var(--c-danger)", marginTop: 10 }}>
           {error}
@@ -353,7 +284,7 @@ export default function PlanTab({ showToast, userId }) {
       {!current.exists || meals.length === 0 ? (
         <div className="card" style={{ padding: 16 }}>
           <div style={{ fontWeight: 700 }}>На этот день плана нет</div>
-          <div className="muted">Сгенерируй или обнови план через меню в правом верхнем углу блока дня.</div>
+          <div className="muted">Сгенерируй или обнови план через кнопку «Обновить план» ниже.</div>
         </div>
       ) : (
         <div className="plan-meals-stack">
@@ -376,6 +307,7 @@ export default function PlanTab({ showToast, userId }) {
       <PlanMenuModal
         open={menuOpen || generateBusy}
         anchorDate={anchorDate}
+        todayIso={mskTodayIso()}
         busy={generateBusy}
         onClose={() => setMenuOpen(false)}
         onConfirm={handleMenuConfirm}
