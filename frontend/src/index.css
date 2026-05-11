@@ -814,7 +814,7 @@ html[data-theme="dark"] .cart-window-day--active {
   display: flex;
   gap: 6px;
   overflow-x: auto;
-  padding: 2px 0 4px;
+  padding: 8px 0 4px;
   margin: 0 -4px;
   padding-left: 4px;
   padding-right: 4px;
@@ -1292,7 +1292,7 @@ html[data-theme="dark"] .plan-meal-card--breakfast .plan-meal-card__kcal {
 }
 .modal-head {
   display: flex;
-  align-items: flex-start;
+  align-items: center;
   justify-content: space-between;
   gap: 14px;
   padding: 18px 18px 12px;
@@ -1338,6 +1338,16 @@ html[data-theme="dark"] .plan-meal-card--breakfast .plan-meal-card__kcal {
   flex: 1;
   min-height: 0;
 }
+
+/* Секции профиля в модалке: личные данные, цель, тренировки, сон */
+.profile-modal-block {
+  background: var(--c-surface);
+  border: 0.5px solid var(--c-border-mid);
+  border-radius: var(--r-lg);
+  padding: 14px 16px;
+  margin-bottom: 10px;
+}
+
 .modal-loading {
   padding: 32px 8px;
   text-align: center;

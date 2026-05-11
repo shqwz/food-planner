@@ -192,6 +192,7 @@ export default function App() {
         <ProfileScreen
           userId={user.telegramId}
           profile={profile}
+          onProfileUpdated={refetchProfile}
           onClose={() => setShowProfile(false)}
           onEdit={() => {
             setShowProfile(false);

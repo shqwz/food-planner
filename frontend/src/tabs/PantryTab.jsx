@@ -1,6 +1,126 @@
 import { useCallback, useEffect, useMemo, useState } from "react";
-import { apiDelete, apiGet } from "../api/client";
+import { apiDelete, apiGet, apiPost } from "../api/client";
 import { IconCloseSmall, IconSearch } from "../components/ui-icons";
+
+const UNIT_OPTIONS = ["г", "мл", "шт", "кг"];
+
+function AddPantryModal({ userId, onClose, onAdded }) {
+  const [name, setName] = useState("");
+  const [suggestions, setSuggestions] = useState([]);
+  const [amount, setAmount] = useState("");
+  const [unit, setUnit] = useState("г");
+  const [price, setPrice] = useState("");
+  const [expiry, setExpiry] = useState("");
+  const [saving, setSaving] = useState(false);
+  const [searchTimer, setSearchTimer] = useState(null);
+
+  const onNameChange = (val) => {
+    setName(val);
+    if (searchTimer) clearTimeout(searchTimer);
+    if (val.trim().length < 2) { setSuggestions([]); return; }
+    const t = setTimeout(async () => {
+      try {
+        const data = await apiGet("/api/products/search", { q: val });
+        setSuggestions(data || []);
+      } catch { setSuggestions([]); }
+    }, 300);
+    setSearchTimer(t);
+  };
+
+  const pickSuggestion = (s) => {
+    setName(s.name);
+    setUnit(s.unit || "г");
+    setSuggestions([]);
+  };
+
+  const submit = async () => {
+    const a = parseFloat(String(amount).replace(",", "."));
+    const p = parseFloat(String(price).replace(",", "."));
+    if (!name.trim() || !(a > 0)) return;
+    setSaving(true);
+    try {
+      await apiPost("/api/pantry", {
+        user_id: userId,
+        name: name.trim(),
+        amount: a,
+        unit,
+        price_per_unit: Number.isFinite(p) && p >= 0 ? p : 0,
+        expiry_date: expiry || null,
+      });
+      onAdded();
+      onClose();
+    } catch (e) {
+      alert(e.message || "Ошибка");
+    } finally {
+      setSaving(false);
+    }
+  };
+
+  return (
+    <div className="modal-backdrop" role="presentation" onClick={onClose}>
+      <div className="modal-dialog" role="dialog" onClick={(e) => e.stopPropagation()}>
+        <div className="modal-head">
+          <div className="modal-head-text"><h2 className="modal-title">Добавить в кладовую</h2></div>
+          <button type="button" className="modal-close" onClick={onClose} aria-label="Закрыть">×</button>
+        </div>
+        <div className="modal-body">
+          <div className="modal-stack">
+            <div className="field-group">
+              <label className="field-label" htmlFor="pantry-name">Название</label>
+              <input
+                id="pantry-name"
+                className="form-text-input"
+                value={name}
+                onChange={(e) => onNameChange(e.target.value)}
+                placeholder="Например, куриная грудка"
+                autoComplete="off"
+              />
+              {suggestions.length > 0 && (
+                <div style={{ background: "var(--c-surface2)", borderRadius: 8, marginTop: 4, overflow: "hidden" }}>
+                  {suggestions.map((s) => (
+                    <div
+                      key={s.id}
+                      style={{ padding: "8px 12px", cursor: "pointer", fontSize: 14 }}
+                      onClick={() => pickSuggestion(s)}
+                    >
+                      {s.name} <span style={{ color: "var(--c-text-secondary)" }}>({s.unit})</span>
+                    </div>
+                  ))}
+                </div>
+              )}
+            </div>
+            <div style={{ display: "flex", gap: 10 }}>
+              <div className="field-group" style={{ flex: 1 }}>
+                <label className="field-label" htmlFor="pantry-amount">Количество</label>
+                <input id="pantry-amount" className="form-text-input" inputMode="decimal" value={amount} onChange={(e) => setAmount(e.target.value)} />
+              </div>
+              <div className="field-group" style={{ width: 110 }}>
+                <label className="field-label" htmlFor="pantry-unit">Единица</label>
+                <div className="modal-select-wrap">
+                  <select id="pantry-unit" className="modal-select" value={unit} onChange={(e) => setUnit(e.target.value)}>
+                    {UNIT_OPTIONS.map((u) => <option key={u} value={u}>{u}</option>)}
+                  </select>
+                </div>
+              </div>
+            </div>
+            <div className="field-group">
+              <label className="field-label" htmlFor="pantry-price">Цена за ед. (₽, необязательно)</label>
+              <input id="pantry-price" className="form-text-input" inputMode="decimal" value={price} onChange={(e) => setPrice(e.target.value)} placeholder="Оставьте пустым" />
+            </div>
+            <div className="field-group">
+              <label className="field-label" htmlFor="pantry-expiry">Срок годности (необязательно)</label>
+              <input id="pantry-expiry" className="form-text-input" type="date" value={expiry} onChange={(e) => setExpiry(e.target.value)} />
+            </div>
+            <button type="button" className="pill-btn pill-btn-primary modal-stack-submit" onClick={submit} disabled={saving || !name.trim() || !amount}>
+              {saving ? "Сохраняем…" : "Добавить"}
+            </button>
+            <button type="button" className="pill-btn pill-btn-ghost modal-stack-secondary" onClick={onClose}>Отмена</button>
+          </div>
+        </div>
+      </div>
+    </div>
+  );
+}
 
 /** Ориентиры «низкий запас» по типу единицы (без единого числа вроде 200 для всех позиций). */
 const LOW_STOCK_GRAMS = 150;
@@ -84,6 +204,7 @@ export default function PantryTab({ showToast, userId }) {
   const [loading, setLoading] = useState(true);
   const [clearing, setClearing] = useState(false);
   const [error, setError] = useState("");
+  const [addModal, setAddModal] = useState(false);
 
   const loadPantry = useCallback(async (opts) => {
     const soft = opts?.soft === true;
@@ -213,7 +334,7 @@ export default function PantryTab({ showToast, userId }) {
         <button
           type="button"
           className="pill-btn pill-btn-ghost"
-          onClick={() => showToast("Добавление через API будет следующим шагом", "info")}
+          onClick={() => setAddModal(true)}
         >
           Добавить продукт
         </button>
@@ -229,6 +350,14 @@ export default function PantryTab({ showToast, userId }) {
           </button>
         )}
       </div>
+
+      {addModal && (
+        <AddPantryModal
+          userId={userId}
+          onClose={() => setAddModal(false)}
+          onAdded={() => loadPantry({ soft: true })}
+        />
+      )}
     </div>
   );
 }

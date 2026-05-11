@@ -216,7 +216,6 @@ export default function ShoppingTab({ showToast, userId }) {
   const confirmReplan = (yes) =>
     run(async () => {
       if (yes) {
-        await apiPost("/api/shopping/dialog-replan", { user_id: userId });
         showToast("Запрос на пересчёт плана принят (пока заглушка)", "info");
       }
       setReplanModal(null);
