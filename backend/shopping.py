@@ -8,7 +8,9 @@ from shopping_service import (
     default_price_per_reference_unit,
     estimate_line_cost,
     shopping_empty_hint_code,
+    pantry_inbound_amount_after_purchase,
 )
+from budget_policy import effective_weekly_limit_rub
 
 
 shopping_bp = Blueprint("shopping", __name__)
@@ -75,10 +77,13 @@ def get_shopping_cart():
         (internal_user_id,),
     ).fetchall()
 
-    budget = conn.execute(
-        "SELECT budget_weekly FROM users WHERE id = ?", (internal_user_id,)
+    urow = conn.execute(
+        "SELECT budget_weekly, budget_tier FROM users WHERE id = ?", (internal_user_id,)
     ).fetchone()
-    bw = budget["budget_weekly"] if budget else None
+    bw = effective_weekly_limit_rub(
+        urow["budget_weekly"] if urow else None,
+        urow["budget_tier"] if urow else None,
+    ) if urow else None
 
     grouped = {}
     flat = []
@@ -332,8 +337,19 @@ def complete_shopping_trip():
     spent = 0.0
     for r in greens:
         spent += float(r["estimated_cost"] or 0)
+        nm = (r.get("display_name") or "").strip()
+        if not nm:
+            pr = conn.execute("SELECT name FROM products_ref WHERE id = ?", (r["product_id"],)).fetchone()
+            nm = (pr["name"] if pr else "") or "Позиция"
+        cost_line = float(r["estimated_cost"] or 0)
+        if cost_line > 0:
+            conn.execute(
+                """INSERT INTO shopping_spend_lines (user_id, product_name, amount_rub)
+                   VALUES (?,?,?)""",
+                (internal_user_id, nm, cost_line),
+            )
         pid = r["product_id"]
-        amt = float(r["amount_needed"] or 0)
+        amt = pantry_inbound_amount_after_purchase(r)
         unit = r["display_unit"] or "г"
         unit_price = implied_unit_price_from_line(amt, unit, float(r["estimated_cost"] or 0))
 

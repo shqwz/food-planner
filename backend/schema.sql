@@ -156,6 +156,16 @@ CREATE TABLE IF NOT EXISTS shopping_spend_log (
     FOREIGN KEY (user_id) REFERENCES users(id)
 );
 
+-- Позиции из завершённой закупки (для статистики по категориям — те же правила classify_product, что и для списка)
+CREATE TABLE IF NOT EXISTS shopping_spend_lines (
+    id INTEGER PRIMARY KEY AUTOINCREMENT,
+    user_id INTEGER NOT NULL,
+    product_name TEXT NOT NULL,
+    amount_rub REAL NOT NULL,
+    created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
+    FOREIGN KEY (user_id) REFERENCES users(id)
+);
+
 -- Замеры тела (для графика прогресса)
 CREATE TABLE IF NOT EXISTS body_measurements (
     id INTEGER PRIMARY KEY AUTOINCREMENT,

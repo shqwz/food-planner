@@ -6,8 +6,24 @@ from flask import Blueprint, request, jsonify
 from database import get_db
 from services import resolve_user_id, NotFoundError
 from food_categories import classify_product, CATEGORIES
+from budget_policy import TIER_PRESET_RUB, DEFAULT_WEEKLY_RUB, UNLIMITED_DB_RUB
 
 profile_bp = Blueprint("profile", __name__)
+
+# Шесть тем для «Питание за неделю» (только продуктовые группы; без отдельной строки «закупки»).
+#
+# Деньги: (1) shopping_list is_purchased=1 — classify_product(display_name);
+# (2) shopping_spend_lines — позиции при «Завершить закупку», те же правила по названию;
+# (3) хвост shopping_spend_log без строк позиций → other (в теме «Орехи, бакалея…»).
+PROFILE_SPEND_THEMES: tuple[tuple[str, str, tuple[str, ...]], ...] = (
+    ("meat_fish", "Мясо и рыба", ("meat_fish",)),
+    ("dairy_cheese", "Молочка и сыр", ("dairy",)),
+    ("vegetables", "Овощи", ("vegetables",)),
+    ("fruits", "Фрукты и ягоды", ("fruits",)),
+    ("grains", "Крупы и хлеб", ("grains",)),
+    # Внутри food_categories сюда же попадают орехи, чай, специи (ключ fats_sauces) и всё «прочее» + хвост старых сумм без позиций
+    ("pantry", "Орехи, бакалея, соусы и прочее", ("fats_sauces", "other")),
+)
 
 
 # ── Helpers ───────────────────────────────────────────────────────────────────
@@ -67,23 +83,23 @@ def _budget_from_payload(data: dict) -> tuple[float | None, str | None, float | 
     bw = data.get("budget_weekly")
 
     if tier == "economy":
-        return 1500.0, "economy", None
+        return TIER_PRESET_RUB["economy"], "economy", None
     if tier == "medium":
-        return 2500.0, "medium", None
+        return TIER_PRESET_RUB["medium"], "medium", None
     if tier == "unlimited":
-        return 50000.0, "unlimited", None
+        return UNLIMITED_DB_RUB, "unlimited", None
     if tier == "custom":
         try:
             v = float(custom_amt) if custom_amt is not None else float(bw or 0)
         except (TypeError, ValueError):
-            v = 2000.0
+            v = DEFAULT_WEEKLY_RUB
         return max(0.0, v), "custom", v
     if bw is not None:
         try:
             return float(bw), tier or None, float(custom_amt) if custom_amt is not None else None
         except (TypeError, ValueError):
             pass
-    return 2500.0, "medium", None
+    return DEFAULT_WEEKLY_RUB, "medium", None
 
 
 # ── GET /api/profile ──────────────────────────────────────────────────────────
@@ -331,10 +347,22 @@ def _calc_stats(conn, internal_id: int) -> dict:
         (internal_id,),
     ).fetchall()
 
-    # 2b. Завершённые закупки: POST /api/shopping/complete пишет сюда и удаляет shopping_list
+    # 2b. Позиции завершённых закупок (после «Завершить») — разбивка по тем же правилам, что и список
+    rows_lines = conn.execute(
+        """
+        SELECT product_name AS product_name, amount_rub AS cost
+        FROM shopping_spend_lines
+        WHERE user_id = ?
+          AND COALESCE(amount_rub, 0) > 0
+          AND date(COALESCE(created_at, '1970-01-01')) >= date('now', '-7 days')
+        """,
+        (internal_id,),
+    ).fetchall()
+
+    # 2c. Старые суммы «за поездку» без позиций (до shopping_spend_lines)
     row_log = conn.execute(
         """
-        SELECT SUM(amount) AS trip_total
+        SELECT COALESCE(SUM(amount), 0) AS trip_total
         FROM shopping_spend_log
         WHERE user_id = ?
           AND COALESCE(amount, 0) > 0
@@ -353,21 +381,29 @@ def _calc_stats(conn, internal_id: int) -> dict:
         category_totals[cat] = category_totals.get(cat, 0.0) + cost
         total_spend += cost
 
-    trip_total = float(row_log["trip_total"] or 0) if row_log else 0.0
-    if trip_total > 0:
-        category_totals["grocery_trips"] += trip_total
-        total_spend += trip_total
+    lines_total = 0.0
+    for row in rows_lines:
+        name = row["product_name"] or ""
+        cost = float(row["cost"] or 0)
+        lines_total += cost
+        cat = classify_product(name)
+        category_totals[cat] = category_totals.get(cat, 0.0) + cost
+        total_spend += cost
 
-    # Только непустые категории, отсортированные по убыванию суммы
-    spend_by_category = sorted(
-        [
-            {"key": k, "label": CATEGORIES[k], "amount": round(category_totals[k])}
-            for k in CATEGORIES
-            if category_totals[k] > 0
-        ],
-        key=lambda x: x["amount"],
-        reverse=True,
-    )
+    trip_log_total = float(row_log["trip_total"] or 0) if row_log else 0.0
+    orphan = max(0.0, trip_log_total - lines_total)
+    if orphan > 0:
+        category_totals["other"] = category_totals.get("other", 0.0) + orphan
+        total_spend += orphan
+
+    # Темы «Питание за неделю»: фиксированный порядок, только ненулевые суммы
+    spend_by_category: list[dict] = []
+    for theme_key, theme_label, internal_keys in PROFILE_SPEND_THEMES:
+        amt = sum(category_totals.get(k, 0.0) for k in internal_keys)
+        if amt > 0:
+            spend_by_category.append(
+                {"key": theme_key, "label": theme_label, "amount": round(amt)}
+            )
 
     return {
         "avg_kcal":           avg_kcal,

@@ -11,7 +11,6 @@ CATEGORIES = {
     "fruits":         "Фрукты",
     "grains":         "Крупы и хлеб",
     "fats_sauces":    "Масла и соусы",
-    "grocery_trips":  "Закупки по списку",
     "other":          "Прочее",
 }
 
@@ -100,6 +99,7 @@ _KEYWORDS: list[tuple[str, str]] = [
     ("пломбир",      "dairy"),
 
     # Овощи
+    ("овощ",         "vegetables"),   # «овощи», «овощная смесь»
     ("картофел",     "vegetables"),
     ("картошк",      "vegetables"),
     ("морков",       "vegetables"),
@@ -146,6 +146,8 @@ _KEYWORDS: list[tuple[str, str]] = [
     ("пастернак",    "vegetables"),
 
     # Фрукты
+    ("ягод",         "fruits"),       # «ягоды», «ягодная смесь»
+    ("фрукт",        "fruits"),
     ("яблок",        "fruits"),
     ("груш",         "fruits"),
     ("банан",        "fruits"),

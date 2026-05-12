@@ -30,6 +30,9 @@ services:
       - "5173:5173"
     depends_on:
       - backend
+    # Исходники с хоста — правки в Cursor сразу в контейнере, без docker cp
+    volumes:
+      - ./frontend/src:/app/frontend/src
     restart: unless-stopped
 
 volumes:

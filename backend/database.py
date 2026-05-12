@@ -85,6 +85,17 @@ def ensure_schema_migrations(conn=None):
         )"""
         )
 
+        conn.execute(
+            """CREATE TABLE IF NOT EXISTS shopping_spend_lines (
+            id INTEGER PRIMARY KEY AUTOINCREMENT,
+            user_id INTEGER NOT NULL,
+            product_name TEXT NOT NULL,
+            amount_rub REAL NOT NULL,
+            created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
+            FOREIGN KEY (user_id) REFERENCES users(id)
+        )"""
+        )
+
         u_cols = {row[1] for row in conn.execute("PRAGMA table_info(users)").fetchall()}
         if u_cols:
             if "goal_custom" not in u_cols:
@@ -104,6 +115,11 @@ def ensure_schema_migrations(conn=None):
                 )
             if "shopping_list_mode" not in u_cols:
                 conn.execute("ALTER TABLE users ADD COLUMN shopping_list_mode TEXT")
+            # Безлимит: в БД храним 0 ₽/нед (раньше подставляли 50 000 — ломало корзину и промпт)
+            conn.execute(
+                "UPDATE users SET budget_weekly = 0 "
+                "WHERE lower(coalesce(budget_tier,'')) = 'unlimited'"
+            )
         seed_product_packaging_defaults(conn)
         # Обновить цены для старых записей где avg_price_per_pack_rub IS NULL
         _backfill_packaging_prices(conn)
@@ -277,7 +293,7 @@ def seed_default_user():
         INSERT OR IGNORE INTO users (telegram_id, name, goal, budget_weekly, age, weight, height)
         VALUES (?, ?, ?, ?, ?, ?, ?)
         """,
-        (123456789, "Алексей", "recomposition", 2500, 30, 75, 178),
+        (123456789, "Алексей", "recomposition", 6000, 30, 75, 178),
     )
     conn.execute(
         """

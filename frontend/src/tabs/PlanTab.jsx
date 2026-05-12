@@ -7,6 +7,8 @@ const MEAL_LABEL = {
   lunch: "Обед",
   dinner: "Ужин",
   snack: "Перекус",
+  pre_workout: "До тренировки",
+  post_workout: "После тренировки",
 };
 
 function parseMealTime(m) {
@@ -317,8 +319,8 @@ export default function PlanTab({ showToast, userId }) {
 }
 
 function PlanMealCard({ meal }) {
-  const type = ["breakfast", "lunch", "dinner", "snack"].includes(meal.type) ? meal.type : "snack";
-  const label = MEAL_LABEL[type] || meal.type || "Приём";
+  const cardType = ["breakfast", "lunch", "dinner", "snack"].includes(meal.type) ? meal.type : "snack";
+  const label = MEAL_LABEL[meal.type] || meal.type || "Приём";
   const kcal = Math.round(Number(meal.total_kcal) || 0);
   const p = Math.round(Number(meal.total_protein) || 0);
   const f = Math.round(Number(meal.total_fat) || 0);
@@ -328,7 +330,7 @@ function PlanMealCard({ meal }) {
     : [];
 
   return (
-    <article className={`plan-meal-card plan-meal-card--${type}`}>
+    <article className={`plan-meal-card plan-meal-card--${cardType}`}>
       <div className="plan-meal-card__inner">
         <div className="plan-meal-card__top">
           <span className="plan-meal-card__type">{label}</span>

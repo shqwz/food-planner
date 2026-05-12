@@ -317,7 +317,11 @@ def get_history():
 
 @diary_bp.route("/api/diary/streak", methods=["GET"])
 def get_diary_streak():
-    """Текущий стрик по дням: минимум 1 отмеченный приём в день."""
+    """
+    Стрик по календарным дням (МСК): минимум один приём в день.
+    Текущий день не обнуляет стрик, пока не закончился без отметок: если сегодня
+    ещё ничего не отмечено, цепочка считается от вчера (как в типичных habit-tracker).
+    """
     user_id = request.args.get("user_id")
     if not user_id:
         return jsonify({"error": "user_id обязателен"}), 400
@@ -342,12 +346,16 @@ def get_diary_streak():
 
     marked_days = {str(r["plan_date"]) for r in rows if r["plan_date"]}
     today = today_msk_iso()
+    today_d = datetime.strptime(today, "%Y-%m-%d").date()
 
-    if today not in marked_days:
+    # Старт цепочки: сегодня, если уже есть отметки; иначе вчера (сегодня ещё «в процессе»)
+    cursor = today_d
+    if cursor.isoformat() not in marked_days:
+        cursor -= timedelta(days=1)
+    if cursor.isoformat() not in marked_days:
         return jsonify({"streak_days": 0, "active": False, "today": today})
 
     streak = 0
-    cursor = datetime.strptime(today, "%Y-%m-%d").date()
     while cursor.isoformat() in marked_days:
         streak += 1
         cursor -= timedelta(days=1)

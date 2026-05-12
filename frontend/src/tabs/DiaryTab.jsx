@@ -8,6 +8,8 @@ const MEAL_LABEL = {
   lunch: "Обед",
   dinner: "Ужин",
   snack: "Перекус",
+  pre_workout: "До тренировки",
+  post_workout: "После тренировки",
 };
 
 const SOURCE_LABEL = {
@@ -437,6 +439,7 @@ export default function DiaryTab({ showToast, userId }) {
       {!loading && todayPlan?.exists && sortedSlots.length > 0 ? (
         <>
           <div className="section-title">Меню на сегодня</div>
+          <div className="meal-slots-list">
           {sortedSlots.map(({ m, idx }) => {
             const logged = slotDiaryMatch[idx];
             const mealType = (m.type || "snack").toLowerCase();
@@ -446,46 +449,40 @@ export default function DiaryTab({ showToast, userId }) {
                 data-meal-type={mealType}
                 key={`${idx}-${m.type}-${m.dish_name || ""}`}
               >
-                <div className="planned-meal-slot-top">
-                  <span className="planned-meal-type">{MEAL_LABEL[m.type] || m.type}</span>
-                  {m.time ? <span className="planned-meal-time">{m.time}</span> : null}
-                </div>
-                <div className="planned-meal-dish">{m.dish_name || "Блюдо"}</div>
-                <div className="planned-meal-meta">
-                  ~{Math.round(m.total_kcal || 0)} ккал
-                  {m.total_protein != null ? ` · Б ${Math.round(m.total_protein)}г` : ""}
-                </div>
-                {logged ? (
-                  <div className="planned-meal-logged-block">
-                    <div className="planned-meal-done-row">
-                      <span className="planned-meal-done-badge">Учтено</span>
-                      <span className="planned-meal-done-kcal">{Math.round(logged.totals?.kcal || 0)} ккал в дневнике</span>
+                <div className="planned-meal-row">
+                  <div className="planned-meal-content">
+                    <div className="planned-meal-slot-top">
+                      <span className="planned-meal-type">{MEAL_LABEL[m.type] || m.type}</span>
+                      {m.time ? <span className="planned-meal-time">{m.time}</span> : null}
                     </div>
-                    {logged.entry_source ? (
+                    <div className="planned-meal-dish">{m.dish_name || "Блюдо"}</div>
+                    <div className="planned-meal-meta">
+                      ~{Math.round(m.total_kcal || 0)} ккал
+                      {m.total_protein != null ? ` · Б ${Math.round(m.total_protein)}г` : ""}
+                    </div>
+                    {logged && logged.entry_source ? (
                       <div className="planned-meal-done-source">
                         {SOURCE_LABEL[logged.entry_source] || logged.entry_source}
                       </div>
                     ) : null}
+                  </div>
+                  <div className="planned-meal-action">
                     <button
                       type="button"
-                      className="pill-btn pill-btn-ghost planned-meal-cta planned-meal-cta--secondary"
+                      className={`meal-check-box${logged ? " meal-check-box--done" : ""}`}
                       onClick={() => openModalForSlot(idx)}
+                      aria-label={logged ? "Уточнить приём" : "Отметить приём"}
                     >
-                      Уточнить приём
+                      <svg width="14" height="14" viewBox="0 0 14 14" fill="none">
+                        <path d="M2 7L5.5 10.5L12 3.5" stroke="currentColor" strokeWidth="2.1" strokeLinecap="round" strokeLinejoin="round"/>
+                      </svg>
                     </button>
                   </div>
-                ) : (
-                  <button
-                    type="button"
-                    className="pill-btn pill-btn-primary planned-meal-cta"
-                    onClick={() => openModalForSlot(idx)}
-                  >
-                    Отметить приём
-                  </button>
-                )}
+                </div>
               </div>
             );
           })}
+          </div>
         </>
       ) : null}
 

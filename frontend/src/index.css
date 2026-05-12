@@ -313,13 +313,18 @@ body {
   margin: -4px 0 4px;
   padding: 0 2px;
 }
+.meal-slots-list {
+  display: flex;
+  flex-direction: column;
+  gap: 10px;
+}
 .planned-meal-slot {
   --meal-accent: var(--c-accent);
   padding: 14px 16px;
   display: flex;
   flex-direction: column;
-  gap: 8px;
-  border-left: 4px solid var(--meal-accent);
+  gap: 6px;
+  border-left: 3px solid var(--meal-accent);
   background: var(--c-surface);
 }
 .planned-meal-slot[data-meal-type="breakfast"] { --meal-accent: #b58b00; }
@@ -333,8 +338,7 @@ html[data-theme="dark"] .planned-meal-slot[data-meal-type="dinner"] { --meal-acc
 .planned-meal-slot-top {
   display: flex;
   align-items: baseline;
-  justify-content: space-between;
-  gap: 10px;
+  gap: 0;
 }
 .planned-meal-type {
   font-size: 11px;
@@ -344,10 +348,16 @@ html[data-theme="dark"] .planned-meal-slot[data-meal-type="dinner"] { --meal-acc
   color: var(--meal-accent);
 }
 .planned-meal-time {
-  font-size: 13px;
+  font-size: 11px;
   font-weight: 600;
-  color: var(--c-text-secondary);
+  color: var(--c-text-tertiary);
   font-variant-numeric: tabular-nums;
+  letter-spacing: 0.02em;
+}
+.planned-meal-time::before {
+  content: " · ";
+  color: var(--c-text-tertiary);
+  font-weight: 400;
 }
 .planned-meal-dish {
   font-size: 16px;
@@ -371,8 +381,53 @@ html[data-theme="dark"] .planned-meal-slot[data-meal-type="dinner"] { --meal-acc
 .planned-meal-cta--secondary {
   margin-top: 6px;
 }
+
+/* ── Meal card row layout ── */
+.planned-meal-row {
+  display: flex;
+  align-items: center;
+  gap: 14px;
+}
+.planned-meal-content {
+  flex: 1;
+  min-width: 0;
+}
+.planned-meal-action {
+  flex-shrink: 0;
+}
+
+/* ── Meal check box (minimal square) ── */
+.meal-check-box {
+  width: 32px;
+  height: 32px;
+  border-radius: 7px;
+  border: 1.5px solid var(--c-text-tertiary);
+  background: none;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  cursor: pointer;
+  color: transparent;
+  transition: border-color 0.13s, background 0.13s, color 0.13s;
+  flex-shrink: 0;
+}
+.meal-check-box:hover {
+  border-color: var(--meal-accent);
+  color: color-mix(in srgb, var(--meal-accent) 50%, transparent);
+}
+.meal-check-box:active {
+  background: color-mix(in srgb, var(--meal-accent) 12%, transparent);
+}
+.meal-check-box--done {
+  border-color: var(--meal-accent);
+  background: color-mix(in srgb, var(--meal-accent) 12%, transparent);
+  color: var(--meal-accent);
+}
+.meal-check-box--done:hover {
+  background: color-mix(in srgb, var(--meal-accent) 20%, transparent);
+}
 .planned-meal-slot--logged {
-  box-shadow: inset 3px 0 0 var(--c-accent);
+  /* полоска убрана — состояние отображается через квадратик-чекбокс */
 }
 .planned-meal-logged-block {
   display: flex;

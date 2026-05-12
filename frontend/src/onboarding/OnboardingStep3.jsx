@@ -1,8 +1,8 @@
 const BUDGETS = [
-  { id: "economy", title: "Эконом", desc: "ориентир до 1500 ₽ в неделю" },
-  { id: "medium", title: "Средний", desc: "ориентир 1500–3000 ₽ в неделю" },
-  { id: "unlimited", title: "Без жёсткого лимита", desc: "для подбора без урезания по цене" },
-  { id: "custom", title: "Своя сумма", desc: "укажешь точный лимит в ₽ за неделю" },
+  { id: "economy", title: "До 3 000 ₽", desc: "недельный ориентир для списка и блюд" },
+  { id: "medium", title: "До 6 000 ₽", desc: "комфортнее по ассортименту и порциям" },
+  { id: "unlimited", title: "Без лимита", desc: "без жёсткого потолка — цены всё равно считаем по-честному" },
+  { id: "custom", title: "Своя сумма", desc: "точный лимит в ₽ за неделю" },
 ];
 
 export default function OnboardingStep3({ value, onChange }) {

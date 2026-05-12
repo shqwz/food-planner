@@ -13,17 +13,27 @@ const GOAL_LABEL = {
 };
 
 const BUDGET_LABEL = {
-  economy:   "Эконом (до 1500 ₽/нед)",
-  medium:    "Средний (1500–3000 ₽/нед)",
+  economy:   "До 3 000 ₽/нед",
+  medium:    "До 6 000 ₽/нед",
   unlimited: "Без лимита",
   custom:    "Своя сумма",
 };
 
 const WD = ["Пн", "Вт", "Ср", "Чт", "Пт", "Сб", "Вс"];
 
-const CATEGORY_COLORS = [
-  "#4A9EDB","#63C87A","#F5A623","#E05C5C","#9B7FD4","#5BB8C4","#A0A0A0",
-];
+/** Цвет сегмента доната / точки легенды по ключу темы (совпадает с backend PROFILE_SPEND_THEMES). */
+const SPEND_THEME_COLORS = {
+  meat_fish: "#E05C5C",
+  dairy_cheese: "#4A9EDB",
+  vegetables: "#63C87A",
+  fruits: "#5BB8C4",
+  grains: "#9B7FD4",
+  pantry: "#F5A623",
+};
+
+function spendThemeColor(key, fallbackIndex) {
+  return SPEND_THEME_COLORS[key] || ["#4A9EDB", "#63C87A", "#F5A623", "#E05C5C", "#9B7FD4", "#5BB8C4"][fallbackIndex % 6];
+}
 
 const MONTHS = [
   "Январь","Февраль","Март","Апрель","Май","Июнь",
@@ -312,7 +322,7 @@ function DonutChart({ categories, total }) {
     if (sweep <= 0) return;
     segments.push({
       path:  describeArc(cx, cy, r, cur, cur + sweep),
-      color: CATEGORY_COLORS[i % CATEGORY_COLORS.length],
+      color: spendThemeColor(cat.key, i),
     });
     cur += (cat.amount / total) * 2 * Math.PI;
   });
@@ -432,8 +442,9 @@ export default function ProfileScreen({ profile, onClose, userId, onProfileUpdat
   const sleepHours   = calcSleepHours(profile.wake_time, profile.sleep_time);
   const spendCategories = stats?.spend_by_category || [];
   const spendTotal      = stats?.spend_total || 0;
-  const budgetWeekly    = Math.round(profile.budget_weekly || 0);
-  const budgetLeft      = budgetWeekly > 0 ? budgetWeekly - spendTotal : null;
+  const isUnlimited     = profile.budget_tier === "unlimited";
+  const budgetWeekly    = isUnlimited ? 0 : Math.round(profile.budget_weekly || 0);
+  const budgetLeft      = !isUnlimited && budgetWeekly > 0 ? budgetWeekly - spendTotal : null;
 
   // ── Wiggle CSS ────────────────────────────────────────────────────────────
 
@@ -1181,11 +1192,11 @@ export default function ProfileScreen({ profile, onClose, userId, onProfileUpdat
                       </div>
                     ) : (
                       <>
-                        {spendCategories.slice(0, 4).map((cat, i) => (
+                        {spendCategories.map((cat, i) => (
                           <div key={cat.key} style={{ display: "flex", alignItems: "center", gap: 7, fontSize: 12 }}>
                             <span style={{
                               width: 8, height: 8, borderRadius: "50%", flexShrink: 0,
-                              background: CATEGORY_COLORS[i % CATEGORY_COLORS.length],
+                              background: spendThemeColor(cat.key, i),
                             }} />
                             <span style={{ flex: 1 }}>{cat.label}</span>
                             <span style={{ fontWeight: 500, color: "var(--c-text-secondary)" }}>
@@ -1193,11 +1204,6 @@ export default function ProfileScreen({ profile, onClose, userId, onProfileUpdat
                             </span>
                           </div>
                         ))}
-                        {spendCategories.length > 4 && (
-                          <div style={{ fontSize: 11, color: "var(--c-text-secondary)" }}>
-                            + ещё {spendCategories.length - 4}
-                          </div>
-                        )}
                       </>
                     )}
                     {budgetLeft !== null && (

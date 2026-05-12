@@ -8,6 +8,7 @@ from planner_engine import build_planning_context
 from shopping_service import rebuild_shopping_list
 from dates_util import today_msk, today_msk_iso, parse_iso_date, iso, add_days
 from ingredient_exclude import is_non_purchasable_tap_water
+from budget_policy import effective_weekly_limit_rub, tier_hint_ru
 
 plan_bp = Blueprint("plan", __name__)
 
@@ -27,7 +28,7 @@ def _enrich_preferences(base_prefs: str, user: dict) -> str:
         }
         parts.append(f"Тип кухни: {kt_map.get(kt, kt)}")
     if user.get("budget_tier"):
-        parts.append(f"Сегмент бюджета: {user['budget_tier']}")
+        parts.append(f"Сегмент бюджета: {tier_hint_ru(user.get('budget_tier'))}")
     return ", ".join(p for p in parts if p)
 
 
@@ -203,11 +204,15 @@ def generate_plan():
         planner_payload=planner_payload,
     )
 
+    tier_lc = (ud.get("budget_tier") or "").strip().lower()
+    weekly_lim = effective_weekly_limit_rub(ud.get("budget_weekly"), ud.get("budget_tier"))
+
     user_data = {
         "training_days": training_days,
         "wake_time": ud.get("wake_time") or "08:00",
         "sleep_time": ud.get("sleep_time") or "23:00",
-        "budget_weekly": ud.get("budget_weekly") or 2000,
+        "budget_weekly": weekly_lim,
+        "budget_tier": tier_lc,
         "goal": ud.get("goal") or "recomposition",
         "goal_custom": ud.get("goal_custom"),
         "preferences": preferences,

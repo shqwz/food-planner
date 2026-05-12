@@ -68,6 +68,43 @@ def implied_unit_price_from_line(amount: float, unit: str, cost: float) -> float
     return c / (amt / 1000.0 + 1e-9)
 
 
+def pantry_inbound_amount_after_purchase(row: dict) -> float:
+    """
+    Объём, который реально попадает в кладовую после покупки.
+    Стоимость строки считается по целым фасовкам (packs × цена), поэтому
+    кладём в pantry объём покупки (packs × pack_weight в согласованных единицах),
+    а не только amount_needed из рецепта.
+    """
+    need = float(row.get("amount_needed") or 0)
+    try:
+        packs = int(row["packs"] or 0) if row.get("packs") is not None else 0
+    except (TypeError, ValueError):
+        packs = 0
+    pw = float(row.get("pack_weight") or 0)
+    if packs <= 0 or pw <= 0:
+        return need
+
+    display_raw = (row.get("display_unit") or "г").strip()
+    pack_u_raw = (row.get("pack_unit") or row.get("display_unit") or "г").strip()
+    name = (row.get("display_name") or "").strip()
+
+    # lazy: deepseek уже тянет shopping_service на уровне модуля
+    from deepseek import _liquid_milk_retail, _normalize_ingredient_unit
+
+    du = _normalize_ingredient_unit(display_raw)
+    pu = _normalize_ingredient_unit(pack_u_raw)
+    bought = packs * pw
+
+    if du == pu:
+        return bought
+    if _liquid_milk_retail(name) and du == "г" and pu == "мл":
+        return bought
+    if _liquid_milk_retail(name) and du == "мл" and pu == "г":
+        return bought
+    # Несопоставимые единицы — не угадываем, оставляем норму рецепта
+    return need
+
+
 def estimate_line_cost(amount: float, unit: str, price_per_reference_unit: float) -> float:
     u = (unit or "г").lower()
     amt = float(amount or 0)

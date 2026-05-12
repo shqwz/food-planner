@@ -1,5 +1,7 @@
 from datetime import datetime, timedelta
 
+from budget_policy import effective_weekly_limit_rub
+
 
 def _parse_time_hhmm(value: str, fallback_minutes: int) -> int:
     try:
@@ -25,7 +27,7 @@ def build_planning_context(user: dict, training_days: list, pantry_items: list, 
     user_weight = float(user.get("weight") or 75)
     wake_time = user.get("wake_time") or "08:00"
     sleep_time = user.get("sleep_time") or "23:00"
-    budget_weekly = float(user.get("budget_weekly") or 0)
+    budget_weekly = effective_weekly_limit_rub(user.get("budget_weekly"), user.get("budget_tier"))
     goal = user.get("goal") or "recomposition"
     m = _goal_multipliers(goal)
 
