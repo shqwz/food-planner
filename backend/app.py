@@ -1,5 +1,12 @@
 from flask import Flask, request, jsonify, send_from_directory
-from database import get_db, init_db, seed_products, seed_default_user, ensure_schema_migrations
+from database import (
+    get_db,
+    init_db,
+    seed_products,
+    seed_default_user,
+    ensure_schema_migrations,
+    ensure_database_initialized,
+)
 from plan import plan_bp
 from diary import diary_bp
 from shopping import shopping_bp
@@ -31,6 +38,7 @@ app.register_blueprint(diary_bp)
 app.register_blueprint(shopping_bp)
 app.register_blueprint(profile_bp)
 
+ensure_database_initialized()
 ensure_schema_migrations()
 
 # ============================================================

@@ -11,6 +11,27 @@ def get_db():
     conn.execute("PRAGMA foreign_keys = ON")
     return conn
 
+
+def ensure_database_initialized():
+    """Если файла БД ещё не разворачивали (нет таблицы users) — schema.sql + сиды.
+
+    На PythonAnywhere часто создаётся пустой SQLite или новый путь в FOOD_PLANNER_DB_PATH
+    без вызова POST /api/init — тогда любой запрос падал с no such table: users.
+    """
+    conn = get_db()
+    try:
+        has_users = conn.execute(
+            "SELECT 1 FROM sqlite_master WHERE type='table' AND name='users' LIMIT 1"
+        ).fetchone()
+    finally:
+        conn.close()
+    if has_users:
+        return
+    init_db()
+    seed_products()
+    seed_default_user()
+
+
 def init_db():
     """Создаёт все таблицы из schema.sql"""
     conn = get_db()
