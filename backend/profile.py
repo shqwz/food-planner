@@ -1,9 +1,11 @@
 """Профиль пользователя: онбординг, настройки, статистика."""
 from __future__ import annotations
 
+import sqlite3
+
 from flask import Blueprint, request, jsonify
 
-from database import get_db
+from database import get_db, ensure_schema_migrations
 from services import resolve_user_id, NotFoundError
 from food_categories import classify_product, CATEGORIES
 from budget_policy import TIER_PRESET_RUB, DEFAULT_WEEKLY_RUB, UNLIMITED_DB_RUB
@@ -146,12 +148,17 @@ def get_profile():
     d0 = dict(row)
     done = int(d0.get("onboarding_completed") or 0) == 1
     if not done and _user_row_looks_onboarded(d0):
-        conn.execute(
-            "UPDATE users SET onboarding_completed = 1 WHERE id = ?",
-            (internal_id,),
-        )
-        conn.commit()
-        done = True
+        try:
+            conn.execute(
+                "UPDATE users SET onboarding_completed = 1 WHERE id = ?",
+                (internal_id,),
+            )
+            conn.commit()
+            done = True
+        except sqlite3.OperationalError:
+            # Старая БД без колонки — не блокируем GET; миграция добавит её при старте приложения.
+            conn.rollback()
+            done = True
 
     training = _collect_training(conn, internal_id)
     excluded = _collect_prefs(conn, internal_id)
@@ -325,6 +332,9 @@ def get_profile_stats():
         return jsonify({"error": "user_id должен быть числом"}), 400
 
     conn = get_db()
+    ensure_schema_migrations(conn)
+    conn.commit()
+
     row = _user_row_by_telegram(conn, tid)
     if not row:
         conn.close()
