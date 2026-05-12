@@ -58,6 +58,10 @@ def ensure_schema_migrations(conn=None):
                 conn.execute("ALTER TABLE shopping_list ADD COLUMN is_manual INTEGER DEFAULT 0")
             if "pack_unit" not in sl_cols:
                 conn.execute("ALTER TABLE shopping_list ADD COLUMN pack_unit TEXT")
+            if "created_at" not in sl_cols:
+                conn.execute(
+                    "ALTER TABLE shopping_list ADD COLUMN created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP"
+                )
 
         conn.execute(
             """CREATE TABLE IF NOT EXISTS product_packaging (
