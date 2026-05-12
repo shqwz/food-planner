@@ -426,9 +426,6 @@ html[data-theme="dark"] .planned-meal-slot[data-meal-type="dinner"] { --meal-acc
 .meal-check-box--done:hover {
   background: color-mix(in srgb, var(--meal-accent) 20%, transparent);
 }
-.planned-meal-slot--logged {
-  /* полоска убрана — состояние отображается через квадратик-чекбокс */
-}
 .planned-meal-logged-block {
   display: flex;
   flex-direction: column;
