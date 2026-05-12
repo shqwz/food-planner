@@ -76,6 +76,28 @@ def _collect_training(conn, internal_id: int) -> list[int]:
     return [int(r["day_of_week"]) for r in rows]
 
 
+def _user_row_looks_onboarded(d: dict) -> bool:
+    """Есть минимальные данные профиля — считаем онбординг пройденным (миграции / старые БД)."""
+    if (d.get("name") or "").strip():
+        return True
+    try:
+        if float(d.get("weight") or 0) > 0:
+            return True
+    except (TypeError, ValueError):
+        pass
+    try:
+        if float(d.get("height") or 0) > 0:
+            return True
+    except (TypeError, ValueError):
+        pass
+    try:
+        if int(d.get("age") or 0) > 0:
+            return True
+    except (TypeError, ValueError):
+        pass
+    return False
+
+
 def _budget_from_payload(data: dict) -> tuple[float | None, str | None, float | None]:
     """Возвращает (budget_weekly, budget_tier, budget_custom)."""
     tier = (data.get("budget") or data.get("budget_tier") or "").strip().lower()
@@ -121,9 +143,18 @@ def get_profile():
         return jsonify({"exists": False})
 
     internal_id = row["id"]
+    d0 = dict(row)
+    done = int(d0.get("onboarding_completed") or 0) == 1
+    if not done and _user_row_looks_onboarded(d0):
+        conn.execute(
+            "UPDATE users SET onboarding_completed = 1 WHERE id = ?",
+            (internal_id,),
+        )
+        conn.commit()
+        done = True
+
     training = _collect_training(conn, internal_id)
     excluded = _collect_prefs(conn, internal_id)
-    done = int(row["onboarding_completed"] or 0) == 1
     conn.close()
 
     if not done:

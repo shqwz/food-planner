@@ -114,9 +114,17 @@ def ensure_schema_migrations(conn=None):
                 conn.execute(
                     "ALTER TABLE users ADD COLUMN onboarding_completed INTEGER DEFAULT 0"
                 )
-                conn.execute(
-                    "UPDATE users SET onboarding_completed = 1 WHERE onboarding_completed IS NULL"
-                )
+            # После появления колонки все старые строки были с 0 — восстанавливаем флаг для уже заполненных профилей
+            conn.execute(
+                """UPDATE users SET onboarding_completed = 1
+                   WHERE COALESCE(onboarding_completed, 0) = 0
+                     AND (
+                       (name IS NOT NULL AND TRIM(name) <> '')
+                       OR (weight IS NOT NULL AND weight > 0)
+                       OR (height IS NOT NULL AND height > 0)
+                       OR (age IS NOT NULL AND age > 0)
+                     )"""
+            )
             if "shopping_list_mode" not in u_cols:
                 conn.execute("ALTER TABLE users ADD COLUMN shopping_list_mode TEXT")
             # Безлимит: в БД храним 0 ₽/нед (раньше подставляли 50 000 — ломало корзину и промпт)
