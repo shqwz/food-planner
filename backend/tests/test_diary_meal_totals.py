@@ -14,15 +14,14 @@ class DiaryMealTotalsTests(unittest.TestCase):
         sys.path.insert(0, str(Path(__file__).resolve().parents[1]))
 
         from app import app
-        from database import get_db, init_db, seed_products
+        from database import get_db, init_db
 
         self.client = app.test_client()
         init_db()
-        seed_products()
 
         conn = get_db()
         conn.execute(
-            "INSERT INTO users (telegram_id, name, goal, budget_weekly) VALUES (?, ?, ?, ?)",
+            "INSERT OR IGNORE INTO users (telegram_id, name, goal, budget_weekly) VALUES (?, ?, ?, ?)",
             (123456789, "Test", "recomposition", 3000),
         )
         conn.commit()
@@ -60,6 +59,28 @@ class DiaryMealTotalsTests(unittest.TestCase):
         log = self.client.get("/api/diary?user_id=123456789&date=2026-06-01").get_json()
         self.assertEqual(len(log["meals"]), 1)
         self.assertEqual(log["meals"][0]["entry_source"], "other")
+
+    def test_diary_offline_products_ref_fills_macros_without_meal_totals(self):
+        r = self.client.post(
+            "/api/diary",
+            json={
+                "user_id": 123456789,
+                "date": "2026-06-02",
+                "meal_type": "lunch",
+                "dish_name": "Гречка",
+                "ingredients": [
+                    {"name": "Гречка сухая", "amount": 100, "unit": "г"},
+                ],
+                "was_planned": False,
+                "entry_source": "other",
+            },
+        )
+        self.assertEqual(r.status_code, 200, r.get_data(as_text=True))
+        body = r.get_json()
+        self.assertGreater(body["totals"]["kcal"], 200)
+        log = self.client.get("/api/diary?user_id=123456789&date=2026-06-02").get_json()
+        ing = log["meals"][0]["ingredients"][0]
+        self.assertGreater(float(ing.get("kcal") or 0), 200)
 
 
 if __name__ == "__main__":

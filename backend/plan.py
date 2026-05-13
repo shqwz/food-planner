@@ -3,7 +3,7 @@ from database import get_db
 from deepseek import generate_weekly_plan, analyze_meal_description
 from datetime import datetime, timedelta
 import json
-from services import resolve_user_id, find_product_id, NotFoundError
+from services import resolve_user_id, find_product_id, NotFoundError, enrich_meal_analysis_with_products_ref
 from planner_engine import build_planning_context
 from shopping_service import rebuild_shopping_list
 from dates_util import today_msk, today_msk_iso, parse_iso_date, iso, add_days
@@ -396,6 +396,12 @@ def analyze_meal():
 
     try:
         result = analyze_meal_description(description)
-        return jsonify(result.get("meal_analysis", result))
+        payload = result.get("meal_analysis", result)
+        conn = get_db()
+        try:
+            enrich_meal_analysis_with_products_ref(conn, payload)
+        finally:
+            conn.close()
+        return jsonify(payload)
     except Exception as e:
         return jsonify({"error": f"Ошибка анализа: {str(e)}"}), 500

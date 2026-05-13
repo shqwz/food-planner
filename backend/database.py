@@ -1,6 +1,6 @@
 import sqlite3
 import os
-from config import resolved_db_path
+from config import REPO_ROOT, resolved_db_path
 
 
 def get_db():
@@ -9,26 +9,38 @@ def get_db():
     conn = sqlite3.connect(path)
     conn.row_factory = sqlite3.Row  # чтобы обращаться к полям по имени
     conn.execute("PRAGMA foreign_keys = ON")
+
+    def _py_lower(s):
+        if s is None:
+            return ""
+        if isinstance(s, bytes):
+            s = s.decode("utf-8", errors="ignore")
+        return str(s).lower()
+
+    conn.create_function("py_lower", 1, _py_lower, deterministic=True)
     return conn
 
 
 def ensure_database_initialized():
-    """Если файла БД ещё не разворачивали (нет таблицы users) — schema.sql + сиды.
+    """Если файла БД ещё не разворачивали (нет ни одного пользователя) — schema.sql + сиды.
 
     На PythonAnywhere часто создаётся пустой SQLite или новый путь в FOOD_PLANNER_DB_PATH
     без вызова POST /api/init — тогда любой запрос падал с no such table: users.
+
+    Важно: наличие пустой таблицы users не считаем «инициализировано» — иначе seed_default_user
+    не выполнится при следующем reload.
     """
     conn = get_db()
     try:
-        has_users = conn.execute(
-            "SELECT 1 FROM sqlite_master WHERE type='table' AND name='users' LIMIT 1"
-        ).fetchone()
+        try:
+            has_row = conn.execute("SELECT 1 FROM users LIMIT 1").fetchone()
+        except sqlite3.OperationalError:
+            has_row = None
     finally:
         conn.close()
-    if has_users:
+    if has_row:
         return
     init_db()
-    seed_products()
     seed_default_user()
 
 
@@ -47,6 +59,7 @@ def init_db():
     conn.commit()
     ensure_schema_migrations(conn)
     seed_product_packaging_defaults(conn)
+    seed_products_full_catalog(conn)
     conn.commit()
     conn.close()
     print("✅ База данных инициализирована")
@@ -120,6 +133,12 @@ def ensure_schema_migrations(conn=None):
             FOREIGN KEY (user_id) REFERENCES users(id)
         )"""
         )
+
+        pr_cols = {row[1] for row in conn.execute("PRAGMA table_info(products_ref)").fetchall()}
+        if pr_cols and "category" not in pr_cols:
+            conn.execute(
+                "ALTER TABLE products_ref ADD COLUMN category TEXT DEFAULT 'raw'"
+            )
 
         u_cols = {row[1] for row in conn.execute("PRAGMA table_info(users)").fetchall()}
         if u_cols:
@@ -283,6 +302,40 @@ def seed_product_packaging_defaults(conn):
         )
 
 
+def seed_products_full_catalog(conn=None):
+    """Загружает корневой products_full.sql (офлайн КБЖУ). Идемпотентно: INSERT OR IGNORE + уникальный индекс."""
+    close = False
+    if conn is None:
+        conn = get_db()
+        close = True
+    path = os.path.join(REPO_ROOT, "products_full.sql")
+    if not os.path.isfile(path):
+        if close:
+            conn.close()
+        return
+    try:
+        conn.execute("DROP INDEX IF EXISTS ux_products_ref_name_category")
+    except sqlite3.OperationalError:
+        pass
+    try:
+        conn.execute(
+            "CREATE UNIQUE INDEX IF NOT EXISTS ux_products_ref_name_category "
+            "ON products_ref (py_lower(name), COALESCE(category, ''))"
+        )
+    except sqlite3.OperationalError:
+        pass
+    with open(path, encoding="utf-8") as f:
+        sql = f.read()
+    sql = sql.replace(
+        "INSERT INTO products_ref",
+        "INSERT OR IGNORE INTO products_ref",
+    )
+    conn.executescript(sql)
+    if close:
+        conn.commit()
+        conn.close()
+
+
 def seed_products():
     """Заполняет справочник продуктов базовыми значениями (твой список)"""
     products = [
@@ -308,10 +361,11 @@ def seed_products():
     cursor = conn.cursor()
     
     for name, unit, kcal, prot, fat, carb in products:
-        cursor.execute('''
-            INSERT OR IGNORE INTO products_ref (name, unit, calories_per_100, protein_per_100, fat_per_100, carbs_per_100, is_custom)
-            VALUES (?, ?, ?, ?, ?, ?, 0)
-        ''', (name, unit, kcal, prot, fat, carb))
+        cursor.execute(
+            '''INSERT OR IGNORE INTO products_ref (name, unit, calories_per_100, protein_per_100, fat_per_100, carbs_per_100, is_custom, category)
+            VALUES (?, ?, ?, ?, ?, ?, 0, 'raw')''',
+            (name, unit, kcal, prot, fat, carb),
+        )
     
     conn.commit()
     conn.close()
@@ -343,5 +397,4 @@ def seed_default_user():
 
 if __name__ == "__main__":
     init_db()
-    seed_products()
     seed_default_user()

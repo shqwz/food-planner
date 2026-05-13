@@ -2,10 +2,10 @@ from flask import Flask, request, jsonify, send_from_directory
 from database import (
     get_db,
     init_db,
-    seed_products,
     seed_default_user,
     ensure_schema_migrations,
     ensure_database_initialized,
+    seed_products_full_catalog,
 )
 from plan import plan_bp
 from diary import diary_bp
@@ -40,6 +40,7 @@ app.register_blueprint(profile_bp)
 
 ensure_database_initialized()
 ensure_schema_migrations()
+seed_products_full_catalog()
 
 # ============================================================
 # ИНИЦИАЛИЗАЦИЯ
@@ -48,7 +49,6 @@ ensure_schema_migrations()
 def initialize():
     """Инициализирует БД и заполняет справочник продуктов"""
     init_db()
-    seed_products()
     seed_default_user()
     return jsonify({"status": "ok", "message": "База данных инициализирована"})
 
@@ -211,9 +211,10 @@ def search_products():
 
     conn = get_db()
     rows = conn.execute('''
-        SELECT id, name, unit, calories_per_100, protein_per_100, fat_per_100, carbs_per_100
+        SELECT id, name, unit, calories_per_100, protein_per_100, fat_per_100, carbs_per_100,
+               COALESCE(category, 'raw') AS category
         FROM products_ref
-        WHERE LOWER(name) LIKE ?
+        WHERE py_lower(name) LIKE ?
         LIMIT 10
     ''', (f"%{query}%",)).fetchall()
     conn.close()
@@ -263,6 +264,5 @@ if __name__ == "__main__":
     # Инициализация при первом запуске
     if not os.path.exists(resolved_db_path()):
         init_db()
-        seed_products()
         seed_default_user()
     app.run(debug=FLASK_DEBUG, host="0.0.0.0", port=_args.port)

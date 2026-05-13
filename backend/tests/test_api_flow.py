@@ -15,20 +15,21 @@ class ApiFlowTests(unittest.TestCase):
 
         # Import after env setup so config uses temp DB.
         from app import app
-        from database import get_db, init_db, seed_products
+        from database import get_db, init_db
 
         self.app = app
         self.client = app.test_client()
         init_db()
-        seed_products()
 
         conn = get_db()
         conn.execute(
-            "INSERT INTO users (telegram_id, name, goal, budget_weekly) VALUES (?, ?, ?, ?)",
+            "INSERT OR IGNORE INTO users (telegram_id, name, goal, budget_weekly) VALUES (?, ?, ?, ?)",
             (123456789, "Test", "recomposition", 3000),
         )
         user_id = conn.execute("SELECT id FROM users WHERE telegram_id = 123456789").fetchone()["id"]
-        product_id = conn.execute("SELECT id FROM products_ref WHERE name = 'гречка сухая'").fetchone()["id"]
+        product_id = conn.execute(
+            "SELECT id FROM products_ref WHERE py_lower(name) = 'гречка сухая' ORDER BY id LIMIT 1"
+        ).fetchone()["id"]
         conn.execute(
             "INSERT INTO pantry (user_id, product_id, amount, price_per_unit) VALUES (?, ?, ?, ?)",
             (user_id, product_id, 150, 120),
@@ -57,7 +58,7 @@ class ApiFlowTests(unittest.TestCase):
         self.assertEqual(response.status_code, 200)
         data = response.get_json()
         self.assertEqual(len(data["items"]), 1)
-        self.assertEqual(data["items"][0]["name"], "гречка сухая")
+        self.assertEqual(data["items"][0]["name"].lower(), "гречка сухая")
         self.assertEqual(data["items"][0]["amount_needed"], 150.0)
 
 

@@ -47,6 +47,7 @@ CREATE TABLE IF NOT EXISTS products_ref (
     protein_per_100 REAL DEFAULT 0,
     fat_per_100 REAL DEFAULT 0,
     carbs_per_100 REAL DEFAULT 0,
+    category TEXT DEFAULT 'raw',  -- raw | ready | drink | spice | … (офлайн-каталог products_full.sql)
     is_custom BOOLEAN DEFAULT 0  -- 1 если пользователь добавил свой продукт
 );
 

@@ -5,7 +5,7 @@ from collections import defaultdict
 import json
 from ingredient_exclude import is_non_purchasable_tap_water
 from dates_util import today_msk_iso
-from services import resolve_user_id, find_product_id, NotFoundError
+from services import resolve_user_id, find_product_id, NotFoundError, enrich_ingredients_from_products_ref
 
 diary_bp = Blueprint("diary", __name__)
 
@@ -217,6 +217,16 @@ def add_meal():
     except NotFoundError as e:
         conn.close()
         return jsonify({"error": str(e)}), 404
+
+    fb = meal_totals_fb or {}
+    has_fallback_macros = (
+        float(fb.get("kcal") or 0) > 0
+        or float(fb.get("protein") or 0) > 0
+        or float(fb.get("fat") or 0) > 0
+        or float(fb.get("carbs") or 0) > 0
+    )
+    if not has_fallback_macros:
+        enrich_ingredients_from_products_ref(conn, ingredients)
 
     totals_agg = _aggregate_meal_totals(ingredients, meal_totals_fb)
     total_kcal = totals_agg["kcal"]
