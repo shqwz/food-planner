@@ -1116,17 +1116,23 @@ html[data-theme="dark"] .plan-meal-card--breakfast .plan-meal-card__kcal {
   padding: 0;
   background: var(--c-bg);
   justify-content: center;
+  max-height: 100vh;
+  max-height: 100dvh;
+  overscroll-behavior: none;
 }
 .onboarding-dialog {
   max-width: 390px;
   width: 100%;
   min-height: 100%;
-  max-height: none;
+  max-height: 100vh;
+  max-height: 100dvh;
   margin: 0 auto;
   border-radius: 0;
   box-shadow: none;
   display: flex;
   flex-direction: column;
+  overflow: hidden;
+  min-height: 0;
 }
 
 .onboarding-header {
@@ -1603,6 +1609,15 @@ html[data-theme="dark"] .plan-meal-card--breakfast .plan-meal-card__kcal {
   display: flex;
   flex-direction: column;
 }
+.modal-dialog.onboarding-dialog {
+  max-width: 390px;
+  max-height: 100vh;
+  max-height: 100dvh;
+  border-radius: 0;
+  box-shadow: none;
+  min-height: 0;
+  overflow: hidden;
+}
 .modal-head {
   display: flex;
   align-items: center;
@@ -2067,6 +2082,9 @@ html[data-theme="dark"] .modal-dialog {
   box-shadow:
     0 4px 28px rgba(0, 0, 0, 0.45),
     0 0 0 0.5px rgba(255, 255, 255, 0.06);
+}
+html[data-theme="dark"] .modal-dialog.onboarding-dialog {
+  box-shadow: none;
 }
 html[data-theme="dark"] .modal-textarea {
   background: var(--c-surface2);
