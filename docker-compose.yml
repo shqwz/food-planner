@@ -9,6 +9,8 @@ services:
       TELEGRAM_BOT_TOKEN: ${TELEGRAM_BOT_TOKEN:-}
       FLASK_DEBUG: ${FLASK_DEBUG:-1}
       RUN_SCHEDULER_IN_WEB: ${RUN_SCHEDULER_IN_WEB:-0}
+      # Локальный docker-compose: демо-пользователь telegram_id=123456789 (не задавайте на проде)
+      SEED_DEMO_USER: "1"
       FOOD_PLANNER_DB_PATH: /data/food_planner.db
       # Лог запросов/ответов ИИ: файл попадает на хост через bind-mount ниже
       AI_TRACE_LOG_PATH: /app/backend/ai_trace/ai_requests.log.jsonl

@@ -41,12 +41,17 @@ ensure_schema_migrations()
 # ============================================================
 # ИНИЦИАЛИЗАЦИЯ
 # ============================================================
+def _maybe_seed_demo_user():
+    if os.environ.get("SEED_DEMO_USER", "").strip().lower() in ("1", "true", "yes"):
+        seed_default_user()
+
+
 @app.route("/api/init", methods=["POST"])
 def initialize():
     """Инициализирует БД и заполняет справочник продуктов"""
     init_db()
     seed_products()
-    seed_default_user()
+    _maybe_seed_demo_user()
     return jsonify({"status": "ok", "message": "База данных инициализирована"})
 
 
@@ -261,5 +266,5 @@ if __name__ == "__main__":
     if not os.path.exists(resolved_db_path()):
         init_db()
         seed_products()
-        seed_default_user()
+        _maybe_seed_demo_user()
     app.run(debug=FLASK_DEBUG, host="0.0.0.0", port=_args.port)

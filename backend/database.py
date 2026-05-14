@@ -276,31 +276,25 @@ def seed_products():
 
 
 def seed_default_user():
-    """Создаёт демо-пользователя для web-клиента в dev-режиме."""
+    """
+    Демо-пользователь для локальной разработки (telegram_id=123456789).
+    Вызывать только при SEED_DEMO_USER=1 (см. docker-compose) — не для продакшена.
+    """
     conn = get_db()
     conn.execute(
         """
-        INSERT OR IGNORE INTO users (telegram_id, name, goal, budget_weekly, age, weight, height, sex, activity_level)
-        VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?)
+        INSERT OR IGNORE INTO users (
+            telegram_id, name, goal, budget_weekly, age, weight, height, sex, activity_level,
+            onboarding_completed, budget_tier, kitchen_type
+        )
+        VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, 1, 'medium', 'home')
         """,
         (123456789, "Алексей", "recomposition", 2500, 30, 75, 178, "male", "moderate"),
-    )
-    conn.execute(
-        """
-        UPDATE users SET
-            onboarding_completed = 1,
-            budget_tier    = COALESCE(budget_tier, 'medium'),
-            kitchen_type   = COALESCE(kitchen_type, 'home'),
-            sex            = COALESCE(sex, 'male'),
-            activity_level = COALESCE(activity_level, 'moderate')
-        WHERE telegram_id = ?
-        """,
-        (123456789,),
     )
     conn.commit()
     conn.close()
 
+
 if __name__ == "__main__":
     init_db()
     seed_products()
-    seed_default_user()
