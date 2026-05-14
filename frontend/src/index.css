@@ -50,6 +50,11 @@ body {
   line-height: 1.5;
 }
 
+html {
+  -webkit-text-size-adjust: 100%;
+  text-size-adjust: 100%;
+}
+
 .app {
   max-width: 390px;
   margin: 0 auto;
@@ -2204,4 +2209,14 @@ html[data-theme="dark"] .form-text-input {
 }
 .content.content--diary-compact .card {
   border-radius: var(--r-md);
+}
+
+/*
+ * iOS Safari: при фокусе в <input>/<textarea>/<select> с font-size < 16px страница
+ * автоматически приближается. Минимум 16px для полей ввода (перекрывает классы выше).
+ */
+input:not([type="checkbox"]):not([type="radio"]):not([type="range"]):not([type="color"]):not([type="file"]):not([type="hidden"]):not([type="button"]):not([type="submit"]):not([type="reset"]):not([type="image"]),
+textarea,
+select {
+  font-size: max(16px, 1em) !important;
 }
