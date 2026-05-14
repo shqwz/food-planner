@@ -71,6 +71,20 @@ export default function OnboardingWizard({ userId, mode = "onboard", initialProf
     }
   }, [mode, initialProfile]);
 
+  useEffect(() => {
+    const vv = window.visualViewport;
+    if (!vv) return;
+    const lockLayoutScroll = () => {
+      if (window.scrollY !== 0) window.scrollTo(0, 0);
+    };
+    vv.addEventListener("scroll", lockLayoutScroll, { passive: true });
+    vv.addEventListener("resize", lockLayoutScroll, { passive: true });
+    return () => {
+      vv.removeEventListener("scroll", lockLayoutScroll);
+      vv.removeEventListener("resize", lockLayoutScroll);
+    };
+  }, []);
+
   const buildPayload = (f) => {
     const age = parseInt(String(f.age), 10);
     const weight = parseFloat(String(f.weight).replace(",", "."));

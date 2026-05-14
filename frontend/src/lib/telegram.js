@@ -15,6 +15,12 @@ export function initTelegramWebApp() {
   if (!tg) return null;
   tg.ready();
   tg.expand();
+  try {
+    const vk = navigator.virtualKeyboard;
+    if (vk && "overlaysContent" in vk) vk.overlaysContent = true;
+  } catch {
+    /* ignore */
+  }
   return tg;
 }
 
