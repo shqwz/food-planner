@@ -7,7 +7,7 @@ import BottomNav from "./components/BottomNav";
 import { IconMoon, IconSun } from "./components/ui-icons";
 import OnboardingWizard from "./onboarding/OnboardingWizard";
 import ProfileScreen from "./screens/ProfileScreen";
-import { getTelegramColorScheme, resolveAppUserIdentity } from "./lib/telegram";
+import { getTelegramColorScheme, resolveAppUserIdentity, fetchTelegramIdentityFromServer, isTelegramMiniAppShell } from "./lib/telegram";
 import { apiGet } from "./api/client";
 
 const THEME_KEY = "food-planner-theme";
@@ -65,10 +65,49 @@ export default function App() {
   }, [user.telegramId]);
 
   useEffect(() => {
-    const next = resolveAppUserIdentity();
-    setUser((prev) =>
-      prev.telegramId === next.telegramId && prev.name === next.name ? prev : next,
+    let cancelled = false;
+    const delays = [0, 200, 600, 1500, 3000];
+    const ids = delays.map((ms) =>
+      window.setTimeout(async () => {
+        if (cancelled) return;
+        const sync = resolveAppUserIdentity();
+        if (sync.telegramId != null) {
+          setUser((p) => (p.telegramId === sync.telegramId && p.name === sync.name ? p : sync));
+          return;
+        }
+        const fromServer = await fetchTelegramIdentityFromServer();
+        if (cancelled || fromServer?.telegramId == null) return;
+        setUser((p) =>
+          p.telegramId === fromServer.telegramId && p.name === fromServer.name ? p : fromServer,
+        );
+      }, ms),
     );
+    const tg = typeof window !== "undefined" ? window.Telegram?.WebApp : null;
+    const onActivated = () => {
+      if (cancelled) return;
+      const sync = resolveAppUserIdentity();
+      if (sync.telegramId != null) {
+        setUser((p) => (p.telegramId === sync.telegramId && p.name === sync.name ? p : sync));
+      }
+    };
+    if (tg?.onEvent) {
+      try {
+        tg.onEvent("activated", onActivated);
+      } catch {
+        /* ignore */
+      }
+    }
+    return () => {
+      cancelled = true;
+      ids.forEach((id) => window.clearTimeout(id));
+      if (tg?.offEvent) {
+        try {
+          tg.offEvent("activated", onActivated);
+        } catch {
+          /* ignore */
+        }
+      }
+    };
   }, []);
 
   useEffect(() => {
@@ -114,6 +153,7 @@ export default function App() {
   const commonProps = { showToast, userId: user.telegramId };
 
   if (user.telegramId == null) {
+    const inTgShell = isTelegramMiniAppShell();
     return (
       <div className="app">
         <div className="content" style={{ padding: 24 }}>
@@ -122,6 +162,14 @@ export default function App() {
             <p style={{ margin: "0 0 14px", color: "var(--c-text-secondary)", fontSize: 14, lineHeight: 1.5 }}>
               Откройте приложение как <strong>Mini App внутри Telegram</strong> — подставится ваш аккаунт.
             </p>
+            {inTgShell && (
+              <p style={{ margin: "0 0 14px", color: "var(--c-text-secondary)", fontSize: 14, lineHeight: 1.5 }}>
+                Telegram уже открыл WebView, но данные пользователя не пришли. Убедитесь, что на сервере задан{" "}
+                <code style={{ fontSize: 13 }}>TELEGRAM_BOT_TOKEN</code> того же бота, что открывает Mini App, и
+                откройте приложение через <strong>inline-кнопку Web App</strong> или меню бота (не обычную ссылку в
+                чат).
+              </p>
+            )}
             <p style={{ margin: 0, color: "var(--c-text-secondary)", fontSize: 14, lineHeight: 1.5 }}>
               На <code style={{ fontSize: 13 }}>localhost</code> / <code style={{ fontSize: 13 }}>127.0.0.1</code> без
               Telegram автоматически используется демо-пользователь <code style={{ fontSize: 13 }}>123456789</code>.

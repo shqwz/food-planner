@@ -4,6 +4,7 @@ from plan import plan_bp
 from diary import diary_bp
 from shopping import shopping_bp
 from profile import profile_bp
+from telegram_webapp import telegram_webapp_bp
 from services import resolve_user_id, find_or_create_product, NotFoundError
 import os
 import argparse
@@ -35,6 +36,7 @@ app.register_blueprint(plan_bp)
 app.register_blueprint(diary_bp)
 app.register_blueprint(shopping_bp)
 app.register_blueprint(profile_bp)
+app.register_blueprint(telegram_webapp_bp)
 
 ensure_schema_migrations()
 

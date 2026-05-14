@@ -1,6 +1,13 @@
+import { apiPost } from "../api/client";
+
 export function getTelegramWebApp() {
   if (typeof window === "undefined") return null;
   return window.Telegram?.WebApp ?? null;
+}
+
+export function isTelegramMiniAppShell() {
+  const tg = getTelegramWebApp();
+  return Boolean(tg && (tg.platform || tg.version));
 }
 
 export function initTelegramWebApp() {
@@ -40,10 +47,29 @@ function normalizeTelegramUserId(raw) {
   return parsePositiveInt(raw);
 }
 
+/** Пользователь из Mini App: сначала initDataUnsafe, иначе разбор строки initData (иногда unsafe пуст). */
+function getTelegramUserObject(tg) {
+  if (!tg) return null;
+  const unsafe = tg.initDataUnsafe?.user;
+  if (unsafe && normalizeTelegramUserId(unsafe.id) != null) return unsafe;
+  const raw = tg.initData;
+  if (!raw || typeof raw !== "string") return null;
+  try {
+    const params = new URLSearchParams(raw);
+    const userJson = params.get("user");
+    if (!userJson) return null;
+    const parsed = JSON.parse(userJson);
+    if (parsed && normalizeTelegramUserId(parsed.id) != null) return parsed;
+  } catch {
+    /* ignore */
+  }
+  return null;
+}
+
 /**
  * Кто сейчас «вошёл» в приложение для API (user_id = telegram_id).
  *
- * 1) Mini App в Telegram: только initDataUnsafe.user.id (?user_id в URL не используем).
+ * 1) Mini App в Telegram: user из initDataUnsafe или из строки initData (?user_id в URL не используем).
  * 2) Локальная отладка: ?user_id=ЧИСЛО на localhost / 127.0.0.1 или при import.meta.env.DEV.
  * 3) Иначе, на localhost / 127.0.0.1 — демо telegram_id=123456789 (Алексей).
  * 4) Иначе telegramId = null.
@@ -57,7 +83,7 @@ export function resolveAppUserIdentity() {
 
   initTelegramWebApp();
   const tg = getTelegramWebApp();
-  const u = tg?.initDataUnsafe?.user;
+  const u = getTelegramUserObject(tg);
   const tid = u ? normalizeTelegramUserId(u.id) : null;
   if (tid != null) {
     const name =
@@ -84,6 +110,33 @@ export function resolveAppUserIdentity() {
   }
 
   return { telegramId: null, name: "", avatar: "?" };
+}
+
+/**
+ * Проверка initData на сервере (HMAC). Нужна, когда initDataUnsafe пуст, а строка initData есть.
+ * @returns {Promise<{ telegramId: number, name: string, avatar: string } | null>}
+ */
+export async function fetchTelegramIdentityFromServer() {
+  if (typeof window === "undefined") return null;
+  initTelegramWebApp();
+  const tg = getTelegramWebApp();
+  const raw = tg?.initData;
+  if (!raw || typeof raw !== "string" || !raw.trim()) return null;
+  try {
+    const r = await apiPost("/api/auth/telegram", { init_data: raw });
+    const tid = r.telegram_id;
+    if (tid == null || !Number.isFinite(Number(tid))) return null;
+    const telegramId = Number(tid);
+    const name = String((r.name || r.first_name || "Пользователь").trim() || "Пользователь");
+    const avatar = initialsFromTgUser({
+      first_name: r.first_name || name,
+      last_name: "",
+      username: r.username || "",
+    });
+    return { telegramId, name, avatar };
+  } catch {
+    return null;
+  }
 }
 
 export function getTelegramColorScheme() {
