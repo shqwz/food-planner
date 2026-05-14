@@ -18,15 +18,6 @@ const STEP_HEADINGS = [
   "Бюджет",
 ];
 
-const STEP_HINTS = [
-  "Имя, пол, возраст, вес и рост",
-  "Уровень жизни и тренировки",
-  "Рекомпозиция, набор, сушка или своя цель",
-  "Подъём и отход ко сну",
-  "Аллергены и нежелательные продукты",
-  "Ориентир трат на продукты в неделю",
-];
-
 function emptyOnboardForm() {
   return {
     name: "",
@@ -34,7 +25,7 @@ function emptyOnboardForm() {
     age: "",
     weight: "",
     height: "",
-    activity_level: "moderate",
+    activity_level: "",
     training_days: [],
     goal: "",
     goal_custom: "",
@@ -54,7 +45,7 @@ function profileToForm(p) {
     age: p.age != null ? String(p.age) : "",
     weight: p.weight != null ? String(p.weight) : "",
     height: p.height != null ? String(p.height) : "",
-    activity_level: p.activity_level || "moderate",
+    activity_level: p.activity_level ?? "",
     training_days: [...(p.training_days || [])],
     goal: p.goal || "",
     goal_custom: p.goal_custom || "",
@@ -192,7 +183,6 @@ export default function OnboardingWizard({ userId, mode = "onboard", initialProf
           </div>
           <p className="onboarding-step-meta">Шаг {step} из {TOTAL}</p>
           <h1 className="onboarding-heading">{STEP_HEADINGS[step - 1]}</h1>
-          <p className="onboarding-step-hint">{STEP_HINTS[step - 1]}</p>
         </header>
 
         <div className="modal-body onboarding-body">

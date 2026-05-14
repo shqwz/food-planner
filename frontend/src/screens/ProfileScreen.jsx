@@ -13,27 +13,17 @@ const GOAL_LABEL = {
 };
 
 const BUDGET_LABEL = {
-  economy:   "До 3 000 ₽/нед",
-  medium:    "До 6 000 ₽/нед",
+  economy:   "Эконом (до 1500 ₽/нед)",
+  medium:    "Средний (1500–3000 ₽/нед)",
   unlimited: "Без лимита",
   custom:    "Своя сумма",
 };
 
 const WD = ["Пн", "Вт", "Ср", "Чт", "Пт", "Сб", "Вс"];
 
-/** Цвет сегмента доната / точки легенды по ключу темы (совпадает с backend PROFILE_SPEND_THEMES). */
-const SPEND_THEME_COLORS = {
-  meat_fish: "#E05C5C",
-  dairy_cheese: "#4A9EDB",
-  vegetables: "#63C87A",
-  fruits: "#5BB8C4",
-  grains: "#9B7FD4",
-  pantry: "#F5A623",
-};
-
-function spendThemeColor(key, fallbackIndex) {
-  return SPEND_THEME_COLORS[key] || ["#4A9EDB", "#63C87A", "#F5A623", "#E05C5C", "#9B7FD4", "#5BB8C4"][fallbackIndex % 6];
-}
+const CATEGORY_COLORS = [
+  "#4A9EDB","#63C87A","#F5A623","#E05C5C","#9B7FD4","#5BB8C4","#A0A0A0",
+];
 
 const MONTHS = [
   "Январь","Февраль","Март","Апрель","Май","Июнь",
@@ -322,7 +312,7 @@ function DonutChart({ categories, total }) {
     if (sweep <= 0) return;
     segments.push({
       path:  describeArc(cx, cy, r, cur, cur + sweep),
-      color: spendThemeColor(cat.key, i),
+      color: CATEGORY_COLORS[i % CATEGORY_COLORS.length],
     });
     cur += (cat.amount / total) * 2 * Math.PI;
   });
@@ -402,6 +392,10 @@ export default function ProfileScreen({ profile, onClose, userId, onProfileUpdat
   /** YYYY-MM-DD для input type="date" */
   const [editBirthDate, setEditBirthDate] = useState("");
 
+  // Пол и активность
+  const [editSex, setEditSex]                 = useState("male");
+  const [editActivity, setEditActivity]       = useState("moderate");
+
   // Цель
   const [editGoal, setEditGoal]         = useState("");
   const [editGoalCustom, setEditGoalCustom] = useState("");
@@ -442,9 +436,8 @@ export default function ProfileScreen({ profile, onClose, userId, onProfileUpdat
   const sleepHours   = calcSleepHours(profile.wake_time, profile.sleep_time);
   const spendCategories = stats?.spend_by_category || [];
   const spendTotal      = stats?.spend_total || 0;
-  const isUnlimited     = profile.budget_tier === "unlimited";
-  const budgetWeekly    = isUnlimited ? 0 : Math.round(profile.budget_weekly || 0);
-  const budgetLeft      = !isUnlimited && budgetWeekly > 0 ? budgetWeekly - spendTotal : null;
+  const budgetWeekly    = Math.round(profile.budget_weekly || 0);
+  const budgetLeft      = budgetWeekly > 0 ? budgetWeekly - spendTotal : null;
 
   // ── Wiggle CSS ────────────────────────────────────────────────────────────
 
@@ -470,6 +463,8 @@ export default function ProfileScreen({ profile, onClose, userId, onProfileUpdat
     if (id === "personal") {
       setEditWeight(String(profile.weight ?? ""));
       setEditHeight(String(profile.height ?? ""));
+      setEditSex(profile.sex || "male");
+      setEditActivity(profile.activity_level || "moderate");
       // Разбираем birth_date или вычисляем из age
       if (profile.birth_date && /^\d{4}-\d{2}-\d{2}/.test(profile.birth_date)) {
         setEditBirthDate(profile.birth_date.slice(0, 10));
@@ -521,7 +516,9 @@ export default function ProfileScreen({ profile, onClose, userId, onProfileUpdat
         budget_custom: profile.budget_custom,
         goal_custom:   profile.goal_custom,
         name:          profile.name,
-        kitchen_type:  profile.kitchen_type,
+        kitchen_type:   profile.kitchen_type,
+        sex:            profile.sex || "male",
+        activity_level: profile.activity_level || "moderate",
       };
 
       if (id === "personal") {
@@ -536,6 +533,8 @@ export default function ProfileScreen({ profile, onClose, userId, onProfileUpdat
           height: parseFloat(editHeight) || profile.height,
           birth_date: birthStr,
           age,
+          sex: editSex,
+          activity_level: editActivity,
         });
       }
       if (id === "goal") {
@@ -835,6 +834,55 @@ export default function ProfileScreen({ profile, onClose, userId, onProfileUpdat
                       const a = ageFromBirthIso(editBirthDate);
                       return a != null ? `Полных лет: ${a}` : "Укажи дату";
                     })()}
+                  </div>
+
+                  {/* Пол */}
+                  <SubLabel>Пол</SubLabel>
+                  <div style={{ display: "flex", gap: 8, marginBottom: 14 }}>
+                    {[{ id: "male", label: "Мужской" }, { id: "female", label: "Женский" }].map((s) => (
+                      <button
+                        key={s.id}
+                        type="button"
+                        onClick={() => setEditSex(s.id)}
+                        style={{
+                          flex: 1, padding: "9px 12px",
+                          borderRadius: "var(--r-md)",
+                          border: editSex === s.id ? "1.5px solid var(--c-accent)" : "0.5px solid var(--c-border-mid)",
+                          background: editSex === s.id ? "color-mix(in srgb, var(--c-accent) 10%, var(--c-surface))" : "var(--c-surface2)",
+                          color: editSex === s.id ? "var(--c-accent)" : "var(--c-text-primary)",
+                          fontFamily: "var(--font)", fontSize: 13, fontWeight: 600, cursor: "pointer",
+                        }}
+                      >{s.label}</button>
+                    ))}
+                  </div>
+
+                  {/* Уровень активности */}
+                  <SubLabel>Уровень активности</SubLabel>
+                  <div style={{ display: "flex", flexDirection: "column", gap: 6, marginBottom: 14 }}>
+                    {[
+                      { id: "sedentary",   label: "Сидячий",            coef: "×1.2" },
+                      { id: "light",       label: "Лёгкая активность",  coef: "×1.375" },
+                      { id: "moderate",    label: "Умеренная",          coef: "×1.55" },
+                      { id: "active",      label: "Высокая",            coef: "×1.725" },
+                      { id: "very_active", label: "Очень высокая",      coef: "×1.9" },
+                    ].map((a) => (
+                      <button
+                        key={a.id}
+                        type="button"
+                        onClick={() => setEditActivity(a.id)}
+                        style={{
+                          display: "flex", justifyContent: "space-between", alignItems: "center",
+                          padding: "9px 12px", borderRadius: "var(--r-md)",
+                          border: editActivity === a.id ? "1.5px solid var(--c-accent)" : "0.5px solid var(--c-border-mid)",
+                          background: editActivity === a.id ? "color-mix(in srgb, var(--c-accent) 10%, var(--c-surface))" : "var(--c-surface2)",
+                          color: editActivity === a.id ? "var(--c-accent)" : "var(--c-text-primary)",
+                          fontFamily: "var(--font)", fontSize: 13, fontWeight: 500, cursor: "pointer",
+                        }}
+                      >
+                        <span>{a.label}</span>
+                        <span style={{ fontSize: 11, fontWeight: 700, opacity: 0.6 }}>{a.coef}</span>
+                      </button>
+                    ))}
                   </div>
 
                   <SaveBtn id="personal" />
@@ -1192,11 +1240,11 @@ export default function ProfileScreen({ profile, onClose, userId, onProfileUpdat
                       </div>
                     ) : (
                       <>
-                        {spendCategories.map((cat, i) => (
+                        {spendCategories.slice(0, 4).map((cat, i) => (
                           <div key={cat.key} style={{ display: "flex", alignItems: "center", gap: 7, fontSize: 12 }}>
                             <span style={{
                               width: 8, height: 8, borderRadius: "50%", flexShrink: 0,
-                              background: spendThemeColor(cat.key, i),
+                              background: CATEGORY_COLORS[i % CATEGORY_COLORS.length],
                             }} />
                             <span style={{ flex: 1 }}>{cat.label}</span>
                             <span style={{ fontWeight: 500, color: "var(--c-text-secondary)" }}>
@@ -1204,6 +1252,11 @@ export default function ProfileScreen({ profile, onClose, userId, onProfileUpdat
                             </span>
                           </div>
                         ))}
+                        {spendCategories.length > 4 && (
+                          <div style={{ fontSize: 11, color: "var(--c-text-secondary)" }}>
+                            + ещё {spendCategories.length - 4}
+                          </div>
+                        )}
                       </>
                     )}
                     {budgetLeft !== null && (

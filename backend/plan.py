@@ -3,12 +3,11 @@ from database import get_db
 from deepseek import generate_weekly_plan, analyze_meal_description
 from datetime import datetime, timedelta
 import json
-from services import resolve_user_id, find_product_id, NotFoundError, enrich_meal_analysis_with_products_ref
+from services import resolve_user_id, find_product_id, NotFoundError
 from planner_engine import build_planning_context
 from shopping_service import rebuild_shopping_list
 from dates_util import today_msk, today_msk_iso, parse_iso_date, iso, add_days
 from ingredient_exclude import is_non_purchasable_tap_water
-from budget_policy import effective_weekly_limit_rub, tier_hint_ru
 
 plan_bp = Blueprint("plan", __name__)
 
@@ -28,7 +27,7 @@ def _enrich_preferences(base_prefs: str, user: dict) -> str:
         }
         parts.append(f"Тип кухни: {kt_map.get(kt, kt)}")
     if user.get("budget_tier"):
-        parts.append(f"Сегмент бюджета: {tier_hint_ru(user.get('budget_tier'))}")
+        parts.append(f"Сегмент бюджета: {user['budget_tier']}")
     return ", ".join(p for p in parts if p)
 
 
@@ -159,6 +158,24 @@ def generate_plan():
     user = conn.execute("SELECT * FROM users WHERE id = ?", (internal_user_id,)).fetchone()
     ud = _user_dict(user)
 
+    # Защита от двойной генерации: блокируем повторный запрос в течение 30 секунд
+    last_gen = conn.execute(
+        "SELECT MAX(generated_at) as t FROM meal_plans WHERE user_id = ?", (internal_user_id,)
+    ).fetchone()
+    if last_gen and last_gen["t"]:
+        from datetime import datetime as _dt
+        try:
+            last_ts = _dt.fromisoformat(last_gen["t"])
+            elapsed = (_dt.utcnow() - last_ts).total_seconds()
+            if elapsed < 30:
+                conn.close()
+                return jsonify({
+                    "error": "Генерация уже запущена. Подождите несколько секунд.",
+                    "retry_after": int(30 - elapsed),
+                }), 429
+        except Exception:
+            pass  # не блокируем при ошибке парсинга
+
     training_rows = conn.execute(
         "SELECT day_of_week FROM training_days WHERE user_id = ?", (internal_user_id,)
     ).fetchall()
@@ -204,21 +221,19 @@ def generate_plan():
         planner_payload=planner_payload,
     )
 
-    tier_lc = (ud.get("budget_tier") or "").strip().lower()
-    weekly_lim = effective_weekly_limit_rub(ud.get("budget_weekly"), ud.get("budget_tier"))
-
     user_data = {
         "training_days": training_days,
         "wake_time": ud.get("wake_time") or "08:00",
         "sleep_time": ud.get("sleep_time") or "23:00",
-        "budget_weekly": weekly_lim,
-        "budget_tier": tier_lc,
+        "budget_weekly": ud.get("budget_weekly") or 2000,
         "goal": ud.get("goal") or "recomposition",
         "goal_custom": ud.get("goal_custom"),
         "preferences": preferences,
         "age": ud.get("age") or 25,
         "weight": ud.get("weight") or 75,
         "height": ud.get("height") or 175,
+        "sex": ud.get("sex") or "male",
+        "activity_level": ud.get("activity_level") or "moderate",
         "algorithm_context": algorithm_context,
         "packaging_cache": packaging_cache,  # ценовые якоря для промпта
     }
@@ -396,12 +411,6 @@ def analyze_meal():
 
     try:
         result = analyze_meal_description(description)
-        payload = result.get("meal_analysis", result)
-        conn = get_db()
-        try:
-            enrich_meal_analysis_with_products_ref(conn, payload)
-        finally:
-            conn.close()
-        return jsonify(payload)
+        return jsonify(result.get("meal_analysis", result))
     except Exception as e:
         return jsonify({"error": f"Ошибка анализа: {str(e)}"}), 500

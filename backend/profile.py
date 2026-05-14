@@ -1,9 +1,11 @@
 """Профиль пользователя: онбординг, настройки, статистика."""
 from __future__ import annotations
 
+import sqlite3
+
 from flask import Blueprint, request, jsonify
 
-from database import get_db
+from database import get_db, ensure_schema_migrations
 from services import resolve_user_id, NotFoundError
 from food_categories import classify_product, CATEGORIES
 
@@ -101,20 +103,27 @@ def get_profile():
         return jsonify({"error": "user_id должен быть числом"}), 400
 
     conn = get_db()
-    row = _user_row_by_telegram(conn, tid)
-    if not row:
+    try:
+        ensure_schema_migrations(conn)
+        conn.commit()
+
+        row = _user_row_by_telegram(conn, tid)
+        if not row:
+            return jsonify({"exists": False})
+
+        u = dict(row)
+        internal_id = u["id"]
+        training = _collect_training(conn, internal_id)
+        excluded = _collect_prefs(conn, internal_id)
+        done = int(u.get("onboarding_completed") or 0) == 1
+
+        if not done:
+            return jsonify(_row_to_profile_dict(row, False, training, excluded))
+        return jsonify(_row_to_profile_dict(row, True, training, excluded))
+    except Exception as e:
+        return jsonify({"error": str(e)}), 500
+    finally:
         conn.close()
-        return jsonify({"exists": False})
-
-    internal_id = row["id"]
-    training = _collect_training(conn, internal_id)
-    excluded = _collect_prefs(conn, internal_id)
-    done = int(row["onboarding_completed"] or 0) == 1
-    conn.close()
-
-    if not done:
-        return jsonify(_row_to_profile_dict(row, False, training, excluded))
-    return jsonify(_row_to_profile_dict(row, True, training, excluded))
 
 
 # ── PUT /api/profile ──────────────────────────────────────────────────────────
@@ -188,88 +197,99 @@ def put_profile():
     excluded = [str(x).strip() for x in excluded if str(x).strip()]
 
     conn = get_db()
-    row = _user_row_by_telegram(conn, tid)
+    try:
+        ensure_schema_migrations(conn)
+        conn.commit()
 
-    if row:
-        internal_id = row["id"]
+        row = _user_row_by_telegram(conn, tid)
+
+        if row:
+            internal_id = row["id"]
+            conn.execute(
+                """
+                UPDATE users SET
+                    name          = COALESCE(?, name),
+                    age           = COALESCE(?, age),
+                    weight        = COALESCE(?, weight),
+                    height        = COALESCE(?, height),
+                    goal          = ?,
+                    goal_custom   = ?,
+                    budget_weekly = ?,
+                    budget_tier   = ?,
+                    budget_custom = ?,
+                    kitchen_type   = COALESCE(?, kitchen_type),
+                    wake_time      = ?,
+                    sleep_time     = ?,
+                    sex            = ?,
+                    activity_level = ?,
+                    onboarding_completed = 1
+                WHERE id = ?
+                """,
+                (
+                    name, age, weight, height,
+                    goal, goal_custom,
+                    bw, budget_tier, budget_custom,
+                    kitchen,
+                    wake, sleep,
+                    sex, activity,
+                    internal_id,
+                ),
+            )
+        else:
+            cur = conn.execute(
+                """
+                INSERT INTO users (
+                    telegram_id, name, age, weight, height,
+                    goal, goal_custom,
+                    budget_weekly, budget_tier, budget_custom,
+                    kitchen_type, wake_time, sleep_time,
+                    sex, activity_level,
+                    onboarding_completed
+                ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, 1)
+                """,
+                (
+                    tid,
+                    name or "Пользователь",
+                    age or 25,
+                    weight or 75,
+                    height or 175,
+                    goal, goal_custom,
+                    bw, budget_tier, budget_custom,
+                    kitchen,
+                    wake, sleep,
+                    sex, activity,
+                ),
+            )
+            internal_id = cur.lastrowid
+
+        conn.execute("DELETE FROM training_days WHERE user_id = ?", (internal_id,))
+        for dow in training_days:
+            conn.execute(
+                "INSERT INTO training_days (user_id, day_of_week) VALUES (?, ?)",
+                (internal_id, dow),
+            )
+
         conn.execute(
-            """
-            UPDATE users SET
-                name          = COALESCE(?, name),
-                age           = COALESCE(?, age),
-                weight        = COALESCE(?, weight),
-                height        = COALESCE(?, height),
-                goal          = ?,
-                goal_custom   = ?,
-                budget_weekly = ?,
-                budget_tier   = ?,
-                budget_custom = ?,
-                kitchen_type   = COALESCE(?, kitchen_type),
-                wake_time      = ?,
-                sleep_time     = ?,
-                sex            = ?,
-                activity_level = ?,
-                onboarding_completed = 1
-            WHERE id = ?
-            """,
-            (
-                name, age, weight, height,
-                goal, goal_custom,
-                bw, budget_tier, budget_custom,
-                kitchen,
-                wake, sleep,
-                sex, activity,
-                internal_id,
-            ),
+            "DELETE FROM food_preferences WHERE user_id = ? AND preference_type = 'exclude'",
+            (internal_id,),
         )
-    else:
-        cur = conn.execute(
-            """
-            INSERT INTO users (
-                telegram_id, name, age, weight, height,
-                goal, goal_custom,
-                budget_weekly, budget_tier, budget_custom,
-                kitchen_type, wake_time, sleep_time,
-                sex, activity_level,
-                onboarding_completed
-            ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, 1)
-            """,
-            (
-                tid,
-                name or "Пользователь",
-                age or 25,
-                weight or 75,
-                height or 175,
-                goal, goal_custom,
-                bw, budget_tier, budget_custom,
-                kitchen,
-                wake, sleep,
-                sex, activity,
-            ),
-        )
-        internal_id = cur.lastrowid
+        for pname in excluded:
+            conn.execute(
+                """INSERT INTO food_preferences (user_id, product_name, preference_type)
+                   VALUES (?, ?, 'exclude')""",
+                (internal_id, pname),
+            )
 
-    conn.execute("DELETE FROM training_days WHERE user_id = ?", (internal_id,))
-    for dow in training_days:
-        conn.execute(
-            "INSERT INTO training_days (user_id, day_of_week) VALUES (?, ?)",
-            (internal_id, dow),
-        )
-
-    conn.execute(
-        "DELETE FROM food_preferences WHERE user_id = ? AND preference_type = 'exclude'",
-        (internal_id,),
-    )
-    for pname in excluded:
-        conn.execute(
-            """INSERT INTO food_preferences (user_id, product_name, preference_type)
-               VALUES (?, ?, 'exclude')""",
-            (internal_id, pname),
-        )
-
-    conn.commit()
-    conn.close()
-    return jsonify({"status": "ok"})
+        conn.commit()
+        return jsonify({"status": "ok"})
+    except sqlite3.OperationalError as e:
+        conn.rollback()
+        return jsonify({"error": str(e)}), 500
+    except Exception as e:
+        conn.rollback()
+        return jsonify({"error": str(e)}), 500
+    finally:
+        conn.close()
 
 
 # ── GET /api/profile/stats ────────────────────────────────────────────────────
@@ -364,7 +384,9 @@ def _calc_stats(conn, internal_id: int) -> dict:
     for row in rows_spend:
         name = row["product_name"] or ""
         cost = float(row["cost"] or 0)
-        cat  = classify_product(name)
+        cat = classify_product(name)
+        if cat not in category_totals:
+            cat = "other"
         category_totals[cat] = category_totals.get(cat, 0.0) + cost
         total_spend += cost
 

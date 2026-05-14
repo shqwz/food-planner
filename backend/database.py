@@ -1,6 +1,6 @@
 import sqlite3
 import os
-from config import REPO_ROOT, resolved_db_path
+from config import resolved_db_path
 
 
 def get_db():
@@ -9,40 +9,7 @@ def get_db():
     conn = sqlite3.connect(path)
     conn.row_factory = sqlite3.Row  # чтобы обращаться к полям по имени
     conn.execute("PRAGMA foreign_keys = ON")
-
-    def _py_lower(s):
-        if s is None:
-            return ""
-        if isinstance(s, bytes):
-            s = s.decode("utf-8", errors="ignore")
-        return str(s).lower()
-
-    conn.create_function("py_lower", 1, _py_lower, deterministic=True)
     return conn
-
-
-def ensure_database_initialized():
-    """Если файла БД ещё не разворачивали (нет ни одного пользователя) — schema.sql + сиды.
-
-    На PythonAnywhere часто создаётся пустой SQLite или новый путь в FOOD_PLANNER_DB_PATH
-    без вызова POST /api/init — тогда любой запрос падал с no such table: users.
-
-    Важно: наличие пустой таблицы users не считаем «инициализировано» — иначе seed_default_user
-    не выполнится при следующем reload.
-    """
-    conn = get_db()
-    try:
-        try:
-            has_row = conn.execute("SELECT 1 FROM users LIMIT 1").fetchone()
-        except sqlite3.OperationalError:
-            has_row = None
-    finally:
-        conn.close()
-    if has_row:
-        return
-    init_db()
-    seed_default_user()
-
 
 def init_db():
     """Создаёт все таблицы из schema.sql"""
@@ -59,7 +26,6 @@ def init_db():
     conn.commit()
     ensure_schema_migrations(conn)
     seed_product_packaging_defaults(conn)
-    seed_products_full_catalog(conn)
     conn.commit()
     conn.close()
     print("✅ База данных инициализирована")
@@ -92,10 +58,6 @@ def ensure_schema_migrations(conn=None):
                 conn.execute("ALTER TABLE shopping_list ADD COLUMN is_manual INTEGER DEFAULT 0")
             if "pack_unit" not in sl_cols:
                 conn.execute("ALTER TABLE shopping_list ADD COLUMN pack_unit TEXT")
-            if "created_at" not in sl_cols:
-                conn.execute(
-                    "ALTER TABLE shopping_list ADD COLUMN created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP"
-                )
 
         conn.execute(
             """CREATE TABLE IF NOT EXISTS product_packaging (
@@ -123,23 +85,6 @@ def ensure_schema_migrations(conn=None):
         )"""
         )
 
-        conn.execute(
-            """CREATE TABLE IF NOT EXISTS shopping_spend_lines (
-            id INTEGER PRIMARY KEY AUTOINCREMENT,
-            user_id INTEGER NOT NULL,
-            product_name TEXT NOT NULL,
-            amount_rub REAL NOT NULL,
-            created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
-            FOREIGN KEY (user_id) REFERENCES users(id)
-        )"""
-        )
-
-        pr_cols = {row[1] for row in conn.execute("PRAGMA table_info(products_ref)").fetchall()}
-        if pr_cols and "category" not in pr_cols:
-            conn.execute(
-                "ALTER TABLE products_ref ADD COLUMN category TEXT DEFAULT 'raw'"
-            )
-
         u_cols = {row[1] for row in conn.execute("PRAGMA table_info(users)").fetchall()}
         if u_cols:
             if "goal_custom" not in u_cols:
@@ -154,24 +99,17 @@ def ensure_schema_migrations(conn=None):
                 conn.execute(
                     "ALTER TABLE users ADD COLUMN onboarding_completed INTEGER DEFAULT 0"
                 )
-            # После появления колонки все старые строки были с 0 — восстанавливаем флаг для уже заполненных профилей
-            conn.execute(
-                """UPDATE users SET onboarding_completed = 1
-                   WHERE COALESCE(onboarding_completed, 0) = 0
-                     AND (
-                       (name IS NOT NULL AND TRIM(name) <> '')
-                       OR (weight IS NOT NULL AND weight > 0)
-                       OR (height IS NOT NULL AND height > 0)
-                       OR (age IS NOT NULL AND age > 0)
-                     )"""
-            )
+                conn.execute(
+                    "UPDATE users SET onboarding_completed = 1 WHERE onboarding_completed IS NULL"
+                )
             if "shopping_list_mode" not in u_cols:
                 conn.execute("ALTER TABLE users ADD COLUMN shopping_list_mode TEXT")
-            # Безлимит: в БД храним 0 ₽/нед (раньше подставляли 50 000 — ломало корзину и промпт)
-            conn.execute(
-                "UPDATE users SET budget_weekly = 0 "
-                "WHERE lower(coalesce(budget_tier,'')) = 'unlimited'"
-            )
+            if "sex" not in u_cols:
+                conn.execute("ALTER TABLE users ADD COLUMN sex TEXT DEFAULT 'male'")
+                conn.execute("UPDATE users SET sex = 'male' WHERE sex IS NULL")
+            if "activity_level" not in u_cols:
+                conn.execute("ALTER TABLE users ADD COLUMN activity_level TEXT DEFAULT 'moderate'")
+                conn.execute("UPDATE users SET activity_level = 'moderate' WHERE activity_level IS NULL")
         seed_product_packaging_defaults(conn)
         # Обновить цены для старых записей где avg_price_per_pack_rub IS NULL
         _backfill_packaging_prices(conn)
@@ -302,40 +240,6 @@ def seed_product_packaging_defaults(conn):
         )
 
 
-def seed_products_full_catalog(conn=None):
-    """Загружает корневой products_full.sql (офлайн КБЖУ). Идемпотентно: INSERT OR IGNORE + уникальный индекс."""
-    close = False
-    if conn is None:
-        conn = get_db()
-        close = True
-    path = os.path.join(REPO_ROOT, "products_full.sql")
-    if not os.path.isfile(path):
-        if close:
-            conn.close()
-        return
-    try:
-        conn.execute("DROP INDEX IF EXISTS ux_products_ref_name_category")
-    except sqlite3.OperationalError:
-        pass
-    try:
-        conn.execute(
-            "CREATE UNIQUE INDEX IF NOT EXISTS ux_products_ref_name_category "
-            "ON products_ref (py_lower(name), COALESCE(category, ''))"
-        )
-    except sqlite3.OperationalError:
-        pass
-    with open(path, encoding="utf-8") as f:
-        sql = f.read()
-    sql = sql.replace(
-        "INSERT INTO products_ref",
-        "INSERT OR IGNORE INTO products_ref",
-    )
-    conn.executescript(sql)
-    if close:
-        conn.commit()
-        conn.close()
-
-
 def seed_products():
     """Заполняет справочник продуктов базовыми значениями (твой список)"""
     products = [
@@ -361,11 +265,10 @@ def seed_products():
     cursor = conn.cursor()
     
     for name, unit, kcal, prot, fat, carb in products:
-        cursor.execute(
-            '''INSERT OR IGNORE INTO products_ref (name, unit, calories_per_100, protein_per_100, fat_per_100, carbs_per_100, is_custom, category)
-            VALUES (?, ?, ?, ?, ?, ?, 0, 'raw')''',
-            (name, unit, kcal, prot, fat, carb),
-        )
+        cursor.execute('''
+            INSERT OR IGNORE INTO products_ref (name, unit, calories_per_100, protein_per_100, fat_per_100, carbs_per_100, is_custom)
+            VALUES (?, ?, ?, ?, ?, ?, 0)
+        ''', (name, unit, kcal, prot, fat, carb))
     
     conn.commit()
     conn.close()
@@ -377,17 +280,19 @@ def seed_default_user():
     conn = get_db()
     conn.execute(
         """
-        INSERT OR IGNORE INTO users (telegram_id, name, goal, budget_weekly, age, weight, height)
-        VALUES (?, ?, ?, ?, ?, ?, ?)
+        INSERT OR IGNORE INTO users (telegram_id, name, goal, budget_weekly, age, weight, height, sex, activity_level)
+        VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?)
         """,
-        (123456789, "Алексей", "recomposition", 6000, 30, 75, 178),
+        (123456789, "Алексей", "recomposition", 2500, 30, 75, 178, "male", "moderate"),
     )
     conn.execute(
         """
         UPDATE users SET
             onboarding_completed = 1,
-            budget_tier = COALESCE(budget_tier, 'medium'),
-            kitchen_type = COALESCE(kitchen_type, 'home')
+            budget_tier    = COALESCE(budget_tier, 'medium'),
+            kitchen_type   = COALESCE(kitchen_type, 'home'),
+            sex            = COALESCE(sex, 'male'),
+            activity_level = COALESCE(activity_level, 'moderate')
         WHERE telegram_id = ?
         """,
         (123456789,),
@@ -397,4 +302,5 @@ def seed_default_user():
 
 if __name__ == "__main__":
     init_db()
+    seed_products()
     seed_default_user()

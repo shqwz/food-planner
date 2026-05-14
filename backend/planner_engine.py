@@ -1,7 +1,5 @@
 from datetime import datetime, timedelta
 
-from budget_policy import effective_weekly_limit_rub
-
 
 def _parse_time_hhmm(value: str, fallback_minutes: int) -> int:
     try:
@@ -11,15 +9,41 @@ def _parse_time_hhmm(value: str, fallback_minutes: int) -> int:
         return fallback_minutes
 
 
-def _goal_multipliers(goal: str):
-    goal = (goal or "recomposition").lower()
-    if goal == "mass_gain":
-        return {"kcal": 36, "protein": 2.2, "fat": 0.9}
-    if goal == "cutting":
-        return {"kcal": 25, "protein": 2.2, "fat": 0.8}
-    if goal == "maintain":
-        return {"kcal": 30, "protein": 1.9, "fat": 0.9}
-    return {"kcal": 29, "protein": 2.0, "fat": 0.9}
+_ACTIVITY_COEF = {
+    "sedentary":   1.2,
+    "light":       1.375,
+    "moderate":    1.55,
+    "active":      1.725,
+    "very_active": 1.9,
+}
+
+_GOAL_PROTEIN = {
+    "mass_gain": 2.2, "cutting": 2.2,
+    "maintain": 1.9,  "recomposition": 2.0, "custom": 2.0,
+}
+_GOAL_FAT = {
+    "mass_gain": 0.9, "cutting": 0.8,
+    "maintain": 0.9,  "recomposition": 0.9, "custom": 0.9,
+}
+_GOAL_KCAL_DELTA = {
+    "mass_gain": +300, "cutting": -400,
+    "maintain": 0,     "recomposition": 0, "custom": 0,
+}
+_TRAIN_BONUS_KCAL = 200
+
+
+def _calc_tdee(user: dict) -> float:
+    """Миффлин–Сан Жеора × коэффициент активности."""
+    w = float(user.get("weight") or 75)
+    h = float(user.get("height") or 175)
+    a = int(user.get("age") or 25)
+    sex = (user.get("sex") or "male").lower()
+    activity = user.get("activity_level") or "moderate"
+    if sex == "female":
+        bmr = 10 * w + 6.25 * h - 5 * a - 161
+    else:
+        bmr = 10 * w + 6.25 * h - 5 * a + 5
+    return bmr * _ACTIVITY_COEF.get(activity, 1.55)
 
 
 def build_planning_context(user: dict, training_days: list, pantry_items: list, planner_payload: dict | None):
@@ -27,9 +51,12 @@ def build_planning_context(user: dict, training_days: list, pantry_items: list, 
     user_weight = float(user.get("weight") or 75)
     wake_time = user.get("wake_time") or "08:00"
     sleep_time = user.get("sleep_time") or "23:00"
-    budget_weekly = effective_weekly_limit_rub(user.get("budget_weekly"), user.get("budget_tier"))
-    goal = user.get("goal") or "recomposition"
-    m = _goal_multipliers(goal)
+    budget_weekly = float(user.get("budget_weekly") or 0)
+    goal = (user.get("goal") or "recomposition").lower()
+
+    tdee = _calc_tdee(user)
+    kcal_delta = _GOAL_KCAL_DELTA.get(goal, 0)
+    base_rest_kcal = tdee + kcal_delta
 
     wake_minutes = _parse_time_hhmm(wake_time, 8 * 60)
     sleep_minutes = _parse_time_hhmm(sleep_time, 23 * 60)
@@ -52,9 +79,9 @@ def build_planning_context(user: dict, training_days: list, pantry_items: list, 
         day_date = tomorrow + timedelta(days=i)
         weekday = day_date.weekday()
         is_training = weekday in training_days
-        base_kcal = user_weight * m["kcal"]
+        base_kcal = base_rest_kcal
         if is_training:
-            base_kcal *= 1.12
+            base_kcal = base_rest_kcal + _TRAIN_BONUS_KCAL
         base_kcal *= (1 + sleep_delta)
 
         if overeating_date:
@@ -65,8 +92,8 @@ def build_planning_context(user: dict, training_days: list, pantry_items: list, 
             elif day_date.strftime("%Y-%m-%d") == (datetime.strptime(overeating_date, "%Y-%m-%d").date() + timedelta(days=1)).strftime("%Y-%m-%d"):
                 base_kcal *= 0.92
 
-        protein = round(user_weight * m["protein"], 1)
-        fat = round(user_weight * m["fat"], 1)
+        protein = round(user_weight * _GOAL_PROTEIN.get(goal, 2.0), 1)
+        fat = round(user_weight * _GOAL_FAT.get(goal, 0.9), 1)
         carbs = round(max(0, (base_kcal - protein * 4 - fat * 9) / 4), 1)
 
         daily_targets.append({

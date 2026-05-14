@@ -24,7 +24,15 @@ function initialsFromName(name) {
 }
 
 export default function App() {
-  const [user, setUser] = useState({ name: "Алексей", avatar: "АП", telegramId: 123456789 });
+  const [user, setUser] = useState(() => {
+    // В Telegram WebApp читаем реальный ID; в dev-режиме используем 123456789
+    const tg = typeof window !== "undefined" ? window.Telegram?.WebApp : null;
+    const tgUser = tg?.initDataUnsafe?.user;
+    const telegramId = tgUser?.id ?? 123456789;
+    const name = tgUser?.first_name ?? "Алексей";
+    const initials = name ? name[0].toUpperCase() : "А";
+    return { name, avatar: initials, telegramId };
+  });
   const [activeTab, setActiveTab] = useState("plan");
   const [themeMode, setThemeMode] = useState(() => {
     const v = localStorage.getItem(THEME_KEY);

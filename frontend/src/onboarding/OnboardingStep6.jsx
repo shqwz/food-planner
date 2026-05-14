@@ -1,12 +1,43 @@
 const BUDGETS = [
-  { id: "economy",   title: "Эконом",            desc: "до 1 500 ₽ в неделю — простые, доступные блюда" },
-  { id: "medium",    title: "Средний",            desc: "1 500–3 000 ₽ — разнообразный рацион" },
-  { id: "unlimited", title: "Без жёсткого лимита", desc: "для подбора без урезания по цене" },
-  { id: "custom",    title: "Своя сумма",          desc: "укажешь точный лимит в ₽ за неделю" },
+  {
+    id: "economy",
+    title: "до 3 000 ₽",
+    label: "Эконом",
+    desc: "Простые и доступные блюда, базовые продукты",
+    weekly: 3000,
+  },
+  {
+    id: "medium",
+    title: "до 6 000 ₽",
+    label: "Средний",
+    desc: "Разнообразный рацион, мясо, рыба, свежие овощи",
+    weekly: 6000,
+  },
+  {
+    id: "unlimited",
+    title: "Без лимита",
+    label: "Комфорт",
+    desc: "Подбор без урезания по цене — приоритет качеству",
+    weekly: null,
+  },
+  {
+    id: "custom",
+    title: "Своя сумма",
+    label: "Свой",
+    desc: "Укажи точный лимит в ₽ за неделю",
+    weekly: null,
+  },
 ];
 
 export default function OnboardingStep6({ value, onChange }) {
-  const setBudget = (id) => onChange({ ...value, budget: id });
+  const setBudget = (id) => {
+    const preset = BUDGETS.find((b) => b.id === id);
+    onChange({
+      ...value,
+      budget: id,
+      budget_custom: preset?.weekly ? String(preset.weekly) : value.budget_custom,
+    });
+  };
 
   return (
     <div className="modal-stack onboarding-step-inner">
@@ -19,10 +50,13 @@ export default function OnboardingStep6({ value, onChange }) {
           <button
             key={b.id}
             type="button"
-            className={`modal-option-card onboarding-goal-card${value.budget === b.id ? " modal-option-card--accent" : ""}`}
+            className={`modal-option-card onboarding-goal-card onboarding-budget-card${value.budget === b.id ? " modal-option-card--accent" : ""}`}
             onClick={() => setBudget(b.id)}
           >
-            <span className="modal-option-title">{b.title}</span>
+            <div className="onboarding-budget-row">
+              <span className="modal-option-title">{b.title}</span>
+              <span className="onboarding-budget-label">{b.label}</span>
+            </div>
             <span className="modal-option-desc">{b.desc}</span>
           </button>
         ))}
@@ -35,9 +69,10 @@ export default function OnboardingStep6({ value, onChange }) {
             id="ob-budget-custom"
             className="modal-select onboarding-input"
             inputMode="numeric"
-            placeholder="например, 2000"
+            placeholder="например, 4500"
             value={value.budget_custom ?? ""}
             onChange={(e) => onChange({ ...value, budget_custom: e.target.value })}
+            autoFocus
           />
         </div>
       )}

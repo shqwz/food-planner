@@ -5,7 +5,7 @@ from collections import defaultdict
 import json
 from ingredient_exclude import is_non_purchasable_tap_water
 from dates_util import today_msk_iso
-from services import resolve_user_id, find_product_id, NotFoundError, enrich_ingredients_from_products_ref
+from services import resolve_user_id, find_product_id, NotFoundError
 
 diary_bp = Blueprint("diary", __name__)
 
@@ -218,16 +218,6 @@ def add_meal():
         conn.close()
         return jsonify({"error": str(e)}), 404
 
-    fb = meal_totals_fb or {}
-    has_fallback_macros = (
-        float(fb.get("kcal") or 0) > 0
-        or float(fb.get("protein") or 0) > 0
-        or float(fb.get("fat") or 0) > 0
-        or float(fb.get("carbs") or 0) > 0
-    )
-    if not has_fallback_macros:
-        enrich_ingredients_from_products_ref(conn, ingredients)
-
     totals_agg = _aggregate_meal_totals(ingredients, meal_totals_fb)
     total_kcal = totals_agg["kcal"]
     total_protein = totals_agg["protein"]
@@ -248,7 +238,7 @@ def add_meal():
         INSERT INTO consumed_meals
         (user_id, consumed_at, plan_date, meal_type, dish_name, ingredients_json,
          total_kcal, total_protein, total_fat, total_carbs, total_cost, was_planned, entry_source, notes)
-        VALUES (?, datetime('now'), ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
+        VALUES (?, datetime('now', '+3 hours'), ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
     ''', (
         internal_user_id, plan_date, meal_type, dish_name,
         json.dumps(ingredients, ensure_ascii=False),
@@ -273,9 +263,50 @@ def add_meal():
     })
 
 
+def _restore_pantry_from_meal(conn, internal_user_id: int, meal_row) -> None:
+    """Возвращает ингредиенты планового приёма обратно в кладовую при удалении записи."""
+    if not meal_row or not meal_row["was_planned"]:
+        return
+    try:
+        ingredients = json.loads(meal_row["ingredients_json"] or "[]")
+    except Exception:
+        return
+    for ing in ingredients:
+        amt = float(ing.get("amount") or 0)
+        if amt <= 1e-9:
+            continue
+        name = (ing.get("name") or "").strip()
+        if not name:
+            continue
+        product_id = ing.get("product_id")
+        if not product_id:
+            row = conn.execute(
+                "SELECT id FROM products_ref WHERE LOWER(name) = LOWER(?)", (name,)
+            ).fetchone()
+            if row:
+                product_id = row["id"]
+        if not product_id:
+            continue
+        existing = conn.execute(
+            "SELECT id, amount FROM pantry WHERE user_id = ? AND product_id = ? LIMIT 1",
+            (internal_user_id, product_id),
+        ).fetchone()
+        if existing:
+            conn.execute(
+                "UPDATE pantry SET amount = amount + ? WHERE id = ?",
+                (amt, existing["id"]),
+            )
+        else:
+            unit = ing.get("unit") or "г"
+            conn.execute(
+                "INSERT INTO pantry (user_id, product_id, amount, unit) VALUES (?, ?, ?, ?)",
+                (internal_user_id, product_id, amt, unit),
+            )
+
+
 @diary_bp.route("/api/diary/<int:meal_id>", methods=["DELETE"])
 def delete_meal(meal_id):
-    """Удалить запись из дневника"""
+    """Удалить запись из дневника, вернуть ингредиенты в кладовую если приём был плановым"""
     user_id = request.args.get("user_id")
     conn = get_db()
     try:
@@ -284,18 +315,28 @@ def delete_meal(meal_id):
         conn.close()
         return jsonify({"error": str(e)}), 404
 
+    meal_row = conn.execute(
+        "SELECT was_planned, ingredients_json FROM consumed_meals WHERE id = ? AND user_id = ?",
+        (meal_id, internal_user_id),
+    ).fetchone()
+
+    if meal_row is None:
+        conn.close()
+        return jsonify({"error": "Запись не найдена"}), 404
+
+    _restore_pantry_from_meal(conn, internal_user_id, meal_row)
     conn.execute("DELETE FROM consumed_meals WHERE id = ? AND user_id = ?", (meal_id, internal_user_id))
     conn.commit()
     conn.close()
-    return jsonify({"status": "ok"})
+    return jsonify({"status": "ok", "pantry_restored": bool(meal_row["was_planned"])})
 
 
 @diary_bp.route("/api/diary/history", methods=["GET"])
 def get_history():
     """Получить историю питания за диапазон дат"""
     user_id = request.args.get("user_id")
-    from_date = request.args.get("from", datetime.now().strftime("%Y-%m-01"))
-    to_date = request.args.get("to", datetime.now().strftime("%Y-%m-%d"))
+    from_date = request.args.get("from", today_msk_iso()[:8] + "01")
+    to_date = request.args.get("to", today_msk_iso())
 
     if not user_id:
         return jsonify({"error": "user_id обязателен"}), 400
@@ -319,6 +360,7 @@ def get_history():
         WHERE user_id = ? AND plan_date BETWEEN ? AND ?
         GROUP BY plan_date
         ORDER BY plan_date DESC
+        LIMIT 90
     ''', (internal_user_id, from_date, to_date)).fetchall()
 
     conn.close()
@@ -327,11 +369,7 @@ def get_history():
 
 @diary_bp.route("/api/diary/streak", methods=["GET"])
 def get_diary_streak():
-    """
-    Стрик по календарным дням (МСК): минимум один приём в день.
-    Текущий день не обнуляет стрик, пока не закончился без отметок: если сегодня
-    ещё ничего не отмечено, цепочка считается от вчера (как в типичных habit-tracker).
-    """
+    """Текущий стрик по дням: минимум 1 отмеченный приём в день."""
     user_id = request.args.get("user_id")
     if not user_id:
         return jsonify({"error": "user_id обязателен"}), 400
@@ -356,16 +394,12 @@ def get_diary_streak():
 
     marked_days = {str(r["plan_date"]) for r in rows if r["plan_date"]}
     today = today_msk_iso()
-    today_d = datetime.strptime(today, "%Y-%m-%d").date()
 
-    # Старт цепочки: сегодня, если уже есть отметки; иначе вчера (сегодня ещё «в процессе»)
-    cursor = today_d
-    if cursor.isoformat() not in marked_days:
-        cursor -= timedelta(days=1)
-    if cursor.isoformat() not in marked_days:
+    if today not in marked_days:
         return jsonify({"streak_days": 0, "active": False, "today": today})
 
     streak = 0
+    cursor = datetime.strptime(today, "%Y-%m-%d").date()
     while cursor.isoformat() in marked_days:
         streak += 1
         cursor -= timedelta(days=1)

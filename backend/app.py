@@ -1,12 +1,5 @@
 from flask import Flask, request, jsonify, send_from_directory
-from database import (
-    get_db,
-    init_db,
-    seed_default_user,
-    ensure_schema_migrations,
-    ensure_database_initialized,
-    seed_products_full_catalog,
-)
+from database import get_db, init_db, seed_products, seed_default_user, ensure_schema_migrations
 from plan import plan_bp
 from diary import diary_bp
 from shopping import shopping_bp
@@ -19,12 +12,17 @@ from config import FLASK_DEBUG, TELEGRAM_BOT_TOKEN, resolved_db_path
 
 app = Flask(__name__, static_folder="../frontend/dist", static_url_path="")
 
-# Вместо CORS(app) напиши:
+import os as _os
+_ALLOWED_ORIGIN = _os.environ.get("CORS_ORIGIN", "*")  # задайте CORS_ORIGIN в prod
+
 @app.after_request
 def add_cors(response):
-    response.headers['Access-Control-Allow-Origin'] = '*'
-    response.headers['Access-Control-Allow-Headers'] = 'Content-Type'
-    response.headers['Access-Control-Allow-Methods'] = 'GET, POST, PUT, DELETE, OPTIONS'
+    origin = _ALLOWED_ORIGIN
+    response.headers["Access-Control-Allow-Origin"] = origin
+    response.headers["Access-Control-Allow-Headers"] = "Content-Type"
+    response.headers["Access-Control-Allow-Methods"] = "GET, POST, PUT, DELETE, OPTIONS"
+    if origin != "*":
+        response.headers["Vary"] = "Origin"
     return response
 
 @app.before_request
@@ -38,9 +36,7 @@ app.register_blueprint(diary_bp)
 app.register_blueprint(shopping_bp)
 app.register_blueprint(profile_bp)
 
-ensure_database_initialized()
 ensure_schema_migrations()
-seed_products_full_catalog()
 
 # ============================================================
 # ИНИЦИАЛИЗАЦИЯ
@@ -49,6 +45,7 @@ seed_products_full_catalog()
 def initialize():
     """Инициализирует БД и заполняет справочник продуктов"""
     init_db()
+    seed_products()
     seed_default_user()
     return jsonify({"status": "ok", "message": "База данных инициализирована"})
 
@@ -211,10 +208,9 @@ def search_products():
 
     conn = get_db()
     rows = conn.execute('''
-        SELECT id, name, unit, calories_per_100, protein_per_100, fat_per_100, carbs_per_100,
-               COALESCE(category, 'raw') AS category
+        SELECT id, name, unit, calories_per_100, protein_per_100, fat_per_100, carbs_per_100
         FROM products_ref
-        WHERE py_lower(name) LIKE ?
+        WHERE LOWER(name) LIKE ?
         LIMIT 10
     ''', (f"%{query}%",)).fetchall()
     conn.close()
@@ -264,5 +260,6 @@ if __name__ == "__main__":
     # Инициализация при первом запуске
     if not os.path.exists(resolved_db_path()):
         init_db()
+        seed_products()
         seed_default_user()
     app.run(debug=FLASK_DEBUG, host="0.0.0.0", port=_args.port)

@@ -9,7 +9,6 @@ from dates_util import today_msk_iso
 from services import find_or_create_product, find_product_id
 from ingredient_exclude import is_non_purchasable_tap_water
 from shopping_service import default_price_per_reference_unit, estimate_line_cost, pantry_price_hint
-from budget_policy import working_budget_target_rub, DEFAULT_WEEKLY_RUB
 
 OPENROUTER_URL = "https://openrouter.ai/api/v1/chat/completions"
 
@@ -152,17 +151,12 @@ def build_training_context(user_data: dict) -> str:
 """
 
 
-def build_budget_context(
-    budget_weekly: float | None,
-    products_with_prices: list,
-    packaging_cache: list | None = None,
-    *,
-    budget_tier: str | None = None,
-) -> str:
-    """Контекст бюджета для промпта. budget_weekly=None — без жёсткого недельного потолка."""
-    tier = (budget_tier or "").strip().lower()
-    unlimited = tier == "unlimited" or budget_weekly is None
+def build_budget_context(budget_weekly: float, products_with_prices: list, packaging_cache: list = None) -> str:
+    """Строит контекст бюджета для промпта. packaging_cache — список упаковок из product_packaging."""
+    budget_weekly_limit = float(budget_weekly or 0)
+    target_budget = round(budget_weekly_limit * 0.9, 2)  # рабочий бюджет с запасом 10%
 
+    # Форматируем известные упаковки как якоря цен для нейросети
     pack_lines = []
     if packaging_cache:
         for p in packaging_cache:
@@ -211,31 +205,13 @@ def build_budget_context(
 - Для продуктов БЕЗ известной упаковки ориентируйся на средние цены в РФ с логикой «пачка/бутылка», а не вес из магазина на развес произвольно."""
         )
 
-    price_tail = (
-        f"\n\nЦены с кладовой (руб за кг/л/шт как в БД, если указаны): "
-        f"{json.dumps(products_with_prices, ensure_ascii=False)}"
-        f"{pack_block}"
-    )
-
-    if unlimited:
-        return f"""
-РЕЖИМ БЮДЖЕТА: без жёсткого недельного лимита (пользователь выбрал «безлимит»).
-Суммарную стоимость ВСЕХ покупных продуктов на 7 дней оценивай правдиво: сначала известные упаковки из кэша выше,
-затем типичные розничные цены РФ; не занижай стоимость искусственно и не завышай без основания.
-Поля estimated_cost и суммы daily_totals.cost должны быть согласованы между собой и с логикой целых упаковок.
-Учитывай, что часть продуктов УЖЕ есть на складе (их стоимость в недельной «новой закупке» не дублируй).
-{price_tail}
-"""
-
-    budget_weekly_limit = float(budget_weekly or 0)
-    target_budget = working_budget_target_rub(budget_weekly_limit)
-
     return f"""
 Бюджет на неделю (жёсткий лимит): {budget_weekly_limit} руб.
-Целевой рабочий бюджет (запас на округления и минимальные фасовки): {target_budget} руб.
-{price_tail}
+Целевой рабочий бюджет (с запасом на упаковки/округления): {target_budget} руб.
+Цены с кладовой (руб за кг/л/шт как в БД, если указаны): {json.dumps(products_with_prices, ensure_ascii=False)}
+{pack_block}
 
-ВАЖНО: общая стоимость ВСЕХ запланированных К ПОКУПКЕ продуктов на неделю должна стремиться к целевому бюджету
+ВАЖНО: общая стоимость ВСЕХ запланированных продуктов на неделю должна стремиться к целевому бюджету
 и НИКОГДА не превышать жёсткий лимит.
 Учитывай, что часть продуктов УЖЕ есть на складе.
 Поля estimated_cost в приёмах пищи должны быть согласованы с известными упаковками там, где они даны.
@@ -276,24 +252,47 @@ def build_products_context(products: list) -> str:
 def generate_weekly_plan(user_data: dict, products: list) -> dict:
     """Генерирует план питания на 7 дней с учётом тренировок, сна, бюджета и остатков."""
     weight = user_data.get("weight", 75)
-    goal = user_data.get("goal", "recomposition")
+    height = user_data.get("height", 175)
+    age    = user_data.get("age", 25)
+    sex    = user_data.get("sex", "male")
+    activity = user_data.get("activity_level", "moderate")
+    goal   = user_data.get("goal", "recomposition")
+
+    # Формула Миффлина – Сан Жеора
+    if sex == "female":
+        bmr = 10 * weight + 6.25 * height - 5 * age - 161
+    else:
+        bmr = 10 * weight + 6.25 * height - 5 * age + 5
+
+    ACTIVITY_COEF = {
+        "sedentary":   1.2,
+        "light":       1.375,
+        "moderate":    1.55,
+        "active":      1.725,
+        "very_active": 1.9,
+    }
+    coef = ACTIVITY_COEF.get(activity, 1.55)
+    tdee = bmr * coef  # полный суточный расход при базовом уровне активности
+
+    # Тренировочный день — дополнительный расход ~200 ккал сверх TDEE
+    TRAIN_BONUS = 200
 
     if goal == "recomposition" or goal == "custom":
-        training_kcal = weight * 33
-        rest_kcal = weight * 28
+        rest_kcal     = round(tdee)
+        training_kcal = round(tdee + TRAIN_BONUS)
         protein = weight * 2.0
     elif goal == "mass_gain":
-        training_kcal = weight * 38
-        rest_kcal = weight * 33
+        rest_kcal     = round(tdee + 200)
+        training_kcal = round(tdee + 400)
         protein = weight * 2.2
-    else:
-        training_kcal = weight * 28
-        rest_kcal = weight * 23
+    else:  # cutting
+        rest_kcal     = round(tdee - 400)
+        training_kcal = round(tdee - 200)
         protein = weight * 2.2
 
     fat = weight * 0.9
     training_carbs = max(0, (training_kcal - protein * 4 - fat * 9) / 4)
-    rest_carbs = max(0, (rest_kcal - protein * 4 - fat * 9) / 4)
+    rest_carbs     = max(0, (rest_kcal     - protein * 4 - fat * 9) / 4)
 
     training_context = build_training_context(user_data)
     products_with_prices = [
@@ -303,16 +302,10 @@ def generate_weekly_plan(user_data: dict, products: list) -> dict:
     # Берём кэш упаковок из БД и передаём в промпт — нейросеть сразу знает реальные цены
     # и не будет придумывать стоимость → избегаем второго запроса на перегенерацию
     packaging_cache = user_data.get("packaging_cache", [])
-    tier = (user_data.get("budget_tier") or "").strip().lower()
-    bw_for_ctx = user_data.get("budget_weekly")
-    if bw_for_ctx is None and tier != "unlimited":
-        bw_for_ctx = DEFAULT_WEEKLY_RUB
-    unlimited_budget = tier == "unlimited" or bw_for_ctx is None
     budget_context = build_budget_context(
-        None if unlimited_budget else float(bw_for_ctx),
+        user_data.get("budget_weekly", 2000),
         products_with_prices,
         packaging_cache=packaging_cache,
-        budget_tier=tier,
     )
     products_context = build_products_context(products)
     preferences = user_data.get("preferences", "нет особых предпочтений")
@@ -326,26 +319,15 @@ def generate_weekly_plan(user_data: dict, products: list) -> dict:
         else f"{goal} (рекомпозиция — набор мышц с одновременным снижением жира)"
     )
 
-    if unlimited_budget:
-        req_budget_cap = (
-            "8. Жёсткого недельного лимита нет: оценивай стоимость покупок на неделю реалистично, без искусственного занижения.\n"
-            "9. Строго придерживайся переданных daily_targets по дням.\n"
-            "10. До вывода JSON: сумма daily_totals.cost за 7 дней должна быть внутренне согласована с ценами упаковок и порциями; исправь явные противоречия."
-        )
-    else:
-        req_budget_cap = (
-            "8. Не превышай жёсткий недельный лимит из блока бюджета.\n"
-            "9. Строго придерживайся переданных daily_targets по дням.\n"
-            "10. До вывода JSON: сумма daily_totals.cost за 7 дней <= целевого рабочего бюджета; если больше — упрости блюда и замени ингредиенты на более дешёвые."
-        )
-
     prompt = f"""
 Составь план питания на 7 дней (начиная с завтрашнего дня).
 
 ИНФОРМАЦИЯ О ПОЛЬЗОВАТЕЛЕ:
+Пол: {"женский" if sex == "female" else "мужской"}
 Возраст: {user_data.get('age', 25)} лет
 Вес: {weight} кг
-Рост: {user_data.get('height', 175)} см
+Рост: {height} см
+Уровень активности: {activity} (коэффициент {coef})
 Цель: {goal_line}
 Предпочтения / исключения: {preferences}
 
@@ -374,7 +356,9 @@ def generate_weekly_plan(user_data: dict, products: list) -> dict:
 6. Блюда простые, без сложной готовки.
 7. Продукты с истекающим сроком из кладовой — постарайся использовать в первые дни, чтобы не пропали.
 14.5. Кладовая — не ограничение. Можешь свободно добавлять в план любые продукты из магазина. Упор на разнообразие, а не на «доесть запасы».
-{req_budget_cap}
+8. Не превышай бюджет.
+9. Строго придерживайся переданных daily_targets по дням.
+10. До вывода JSON выполни внутреннюю самопроверку: сумма daily_totals.cost за 7 дней должна быть <= целевого рабочего бюджета; если больше — упрости блюда и замени ингредиенты на более дешёвые.
 11. Предпочитай недорогие базовые продукты и повторное использование одних и тех же ингредиентов в разные дни.
 12. В daily_totals.cost давай реалистичную оценку (не занижай искусственно).
 13. Стоимость — через цену целой упаковки и доли/амортизацию на дни использования (см. блок бюджета выше): не считать порцию как граммы×цена_за_г; суммы за неделю согласовывать с ceil(объём/фасовка)×цена упаковки и с daily_totals по дням.
