@@ -18,6 +18,8 @@ CREATE TABLE IF NOT EXISTS users (
     shopping_list_mode TEXT,
     wake_time TEXT DEFAULT '08:00',
     sleep_time TEXT DEFAULT '23:00',
+    sex TEXT DEFAULT 'male',          -- male | female
+    activity_level TEXT DEFAULT 'moderate', -- sedentary | light | moderate | active | very_active
     created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP
 );
 
@@ -47,7 +49,6 @@ CREATE TABLE IF NOT EXISTS products_ref (
     protein_per_100 REAL DEFAULT 0,
     fat_per_100 REAL DEFAULT 0,
     carbs_per_100 REAL DEFAULT 0,
-    category TEXT DEFAULT 'raw',  -- raw | ready | drink | spice | … (офлайн-каталог products_full.sql)
     is_custom BOOLEAN DEFAULT 0  -- 1 если пользователь добавил свой продукт
 );
 
@@ -153,16 +154,6 @@ CREATE TABLE IF NOT EXISTS shopping_spend_log (
     user_id INTEGER NOT NULL,
     amount REAL NOT NULL,
     note TEXT,
-    created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
-    FOREIGN KEY (user_id) REFERENCES users(id)
-);
-
--- Позиции из завершённой закупки (для статистики по категориям — те же правила classify_product, что и для списка)
-CREATE TABLE IF NOT EXISTS shopping_spend_lines (
-    id INTEGER PRIMARY KEY AUTOINCREMENT,
-    user_id INTEGER NOT NULL,
-    product_name TEXT NOT NULL,
-    amount_rub REAL NOT NULL,
     created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
     FOREIGN KEY (user_id) REFERENCES users(id)
 );

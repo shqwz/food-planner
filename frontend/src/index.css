@@ -426,6 +426,9 @@ html[data-theme="dark"] .planned-meal-slot[data-meal-type="dinner"] { --meal-acc
 .meal-check-box--done:hover {
   background: color-mix(in srgb, var(--meal-accent) 20%, transparent);
 }
+.planned-meal-slot--logged {
+  /* полоска убрана — состояние отображается через квадратик-чекбокс */
+}
 .planned-meal-logged-block {
   display: flex;
   flex-direction: column;
@@ -1329,6 +1332,239 @@ html[data-theme="dark"] .plan-meal-card--breakfast .plan-meal-card__kcal {
   cursor: pointer;
   font-family: var(--font);
 }
+/* ── Onboarding новые элементы ── */
+.onboarding-step-hint {
+  font-size: 12px;
+  color: var(--c-text-tertiary);
+  margin-top: 2px;
+  margin-bottom: 0;
+}
+
+/* Пол */
+.onboarding-sex-row {
+  display: flex;
+  gap: 10px;
+}
+.onboarding-sex-btn {
+  flex: 1;
+  padding: 12px;
+  border-radius: var(--r-md);
+  border: 1.5px solid var(--c-border);
+  background: var(--c-surface2);
+  color: var(--c-text-primary);
+  font-family: var(--font);
+  font-size: 14px;
+  font-weight: 600;
+  cursor: pointer;
+  transition: border-color 0.13s, background 0.13s;
+}
+.onboarding-sex-btn--active {
+  border-color: var(--c-accent);
+  background: color-mix(in srgb, var(--c-accent) 10%, var(--c-surface));
+  color: var(--c-accent);
+}
+
+/* Активность */
+.onboarding-activity-card {
+  position: relative;
+}
+.onboarding-activity-coef {
+  position: absolute;
+  top: 10px;
+  right: 12px;
+  font-size: 11px;
+  font-weight: 700;
+  color: var(--c-text-tertiary);
+  font-variant-numeric: tabular-nums;
+}
+.modal-option-card--accent .onboarding-activity-coef {
+  color: var(--c-accent);
+}
+
+/* Дни недели */
+.onboarding-days-row {
+  display: flex;
+  gap: 6px;
+  flex-wrap: wrap;
+}
+.onboarding-day-btn {
+  width: 38px;
+  height: 38px;
+  border-radius: var(--r-md);
+  border: 1.5px solid var(--c-border);
+  background: var(--c-surface2);
+  color: var(--c-text-secondary);
+  font-family: var(--font);
+  font-size: 12px;
+  font-weight: 600;
+  cursor: pointer;
+  transition: border-color 0.13s, background 0.13s, color 0.13s;
+}
+.onboarding-day-btn--active {
+  border-color: var(--c-accent);
+  background: color-mix(in srgb, var(--c-accent) 12%, var(--c-surface));
+  color: var(--c-accent);
+}
+
+/* Подсказка под полем */
+.onboarding-field-hint {
+  font-size: 12px;
+  color: var(--c-text-tertiary);
+  margin-top: -4px;
+  margin-bottom: 8px;
+}
+
+/* Время */
+.onboarding-time-row {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 6px;
+  margin-bottom: 10px;
+}
+.onboarding-time-chip {
+  padding: 7px 11px;
+  border-radius: 20px;
+  border: 1.5px solid var(--c-border);
+  background: var(--c-surface2);
+  color: var(--c-text-secondary);
+  font-family: var(--font);
+  font-size: 12px;
+  font-weight: 600;
+  cursor: pointer;
+  font-variant-numeric: tabular-nums;
+  transition: border-color 0.13s, background 0.13s, color 0.13s;
+}
+.onboarding-time-chip--active {
+  border-color: var(--c-accent);
+  background: color-mix(in srgb, var(--c-accent) 12%, var(--c-surface));
+  color: var(--c-accent);
+}
+.onboarding-time-custom-wrap {
+  display: flex;
+  align-items: center;
+  gap: 10px;
+}
+.onboarding-time-custom-label {
+  font-size: 12px;
+  color: var(--c-text-tertiary);
+  white-space: nowrap;
+}
+.onboarding-time-input {
+  flex: 1;
+  background: var(--c-surface2);
+  border: 1px solid var(--c-border);
+  border-radius: var(--r-md);
+  padding: 8px 12px;
+  font-family: var(--font);
+  font-size: 14px;
+  font-weight: 600;
+  color: var(--c-text-primary);
+  font-variant-numeric: tabular-nums;
+}
+.onboarding-sleep-summary {
+  font-size: 13px;
+  color: var(--c-text-secondary);
+  text-align: center;
+  padding: 8px 12px;
+  background: var(--c-surface2);
+  border-radius: var(--r-md);
+}
+.onboarding-sleep-summary strong {
+  color: var(--c-text-primary);
+}
+
+/* КБЖУ превью */
+.onboarding-kcal-preview {
+  background: var(--c-surface2);
+  border-radius: var(--r-md);
+  padding: 12px 14px;
+  display: flex;
+  flex-direction: column;
+  gap: 6px;
+  border: 1px solid var(--c-border);
+}
+.onboarding-kcal-label {
+  font-size: 11px;
+  font-weight: 700;
+  letter-spacing: 0.06em;
+  text-transform: uppercase;
+  color: var(--c-text-tertiary);
+}
+.onboarding-kcal-main {
+  font-size: 22px;
+  font-weight: 700;
+  color: var(--c-accent);
+  font-variant-numeric: tabular-nums;
+}
+.onboarding-macros-row {
+  display: flex;
+  gap: 10px;
+}
+.onboarding-macro {
+  font-size: 13px;
+  font-weight: 600;
+  padding: 3px 10px;
+  border-radius: 20px;
+  font-variant-numeric: tabular-nums;
+}
+.onboarding-macro--p { background: rgba(80,180,120,.15); color: #3a9e6c; }
+.onboarding-macro--f { background: rgba(220,160,60,.15);  color: #b07a10; }
+.onboarding-macro--c { background: rgba(80,140,220,.15);  color: #3a6ec0; }
+
+/* Пресеты исключений */
+.onboarding-preset-chips {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 8px;
+}
+.onboarding-preset-chip {
+  padding: 7px 12px;
+  border-radius: 20px;
+  border: 1.5px solid var(--c-border);
+  background: var(--c-surface2);
+  color: var(--c-text-secondary);
+  font-family: var(--font);
+  font-size: 13px;
+  font-weight: 500;
+  cursor: pointer;
+  transition: border-color 0.13s, background 0.13s, color 0.13s;
+}
+.onboarding-preset-chip--active {
+  border-color: var(--c-danger, #e05555);
+  background: color-mix(in srgb, var(--c-danger, #e05555) 10%, var(--c-surface));
+  color: var(--c-danger, #e05555);
+}
+.onboarding-preset-chip-check {
+  font-size: 11px;
+}
+.onboarding-excl-input-row {
+  display: flex;
+  gap: 8px;
+  align-items: center;
+}
+.onboarding-excl-input-row .onboarding-input {
+  flex: 1;
+}
+.onboarding-excl-add-btn {
+  flex-shrink: 0;
+  padding: 0 14px;
+  height: 44px;
+  border-radius: var(--r-md);
+  border: 1px solid var(--c-border);
+  background: var(--c-surface2);
+  color: var(--c-text-primary);
+  font-family: var(--font);
+  font-size: 13px;
+  font-weight: 600;
+  cursor: pointer;
+  white-space: nowrap;
+  transition: background 0.13s;
+}
+.onboarding-excl-add-btn:disabled {
+  opacity: 0.4;
+  cursor: default;
+}
+
 .modal-dialog {
   width: 100%;
   max-width: 380px;

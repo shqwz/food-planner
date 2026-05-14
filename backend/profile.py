@@ -1,31 +1,13 @@
 """Профиль пользователя: онбординг, настройки, статистика."""
 from __future__ import annotations
 
-import sqlite3
-
 from flask import Blueprint, request, jsonify
 
-from database import get_db, ensure_schema_migrations
+from database import get_db
 from services import resolve_user_id, NotFoundError
 from food_categories import classify_product, CATEGORIES
-from budget_policy import TIER_PRESET_RUB, DEFAULT_WEEKLY_RUB, UNLIMITED_DB_RUB
 
 profile_bp = Blueprint("profile", __name__)
-
-# Шесть тем для «Питание за неделю» (только продуктовые группы; без отдельной строки «закупки»).
-#
-# Деньги: (1) shopping_list is_purchased=1 — classify_product(display_name);
-# (2) shopping_spend_lines — позиции при «Завершить закупку», те же правила по названию;
-# (3) хвост shopping_spend_log без строк позиций → other (в теме «Орехи, бакалея…»).
-PROFILE_SPEND_THEMES: tuple[tuple[str, str, tuple[str, ...]], ...] = (
-    ("meat_fish", "Мясо и рыба", ("meat_fish",)),
-    ("dairy_cheese", "Молочка и сыр", ("dairy",)),
-    ("vegetables", "Овощи", ("vegetables",)),
-    ("fruits", "Фрукты и ягоды", ("fruits",)),
-    ("grains", "Крупы и хлеб", ("grains",)),
-    # Внутри food_categories сюда же попадают орехи, чай, специи (ключ fats_sauces) и всё «прочее» + хвост старых сумм без позиций
-    ("pantry", "Орехи, бакалея, соусы и прочее", ("fats_sauces", "other")),
-)
 
 
 # ── Helpers ───────────────────────────────────────────────────────────────────
@@ -57,6 +39,8 @@ def _row_to_profile_dict(row, exists: bool, training_days: list, excluded: list)
         "excluded_foods":    excluded,
         "kitchen_type":      d.get("kitchen_type"),
         "shopping_list_mode": d.get("shopping_list_mode"),
+        "sex":               d.get("sex") or "male",
+        "activity_level":    d.get("activity_level") or "moderate",
     }
 
 
@@ -78,28 +62,6 @@ def _collect_training(conn, internal_id: int) -> list[int]:
     return [int(r["day_of_week"]) for r in rows]
 
 
-def _user_row_looks_onboarded(d: dict) -> bool:
-    """Есть минимальные данные профиля — считаем онбординг пройденным (миграции / старые БД)."""
-    if (d.get("name") or "").strip():
-        return True
-    try:
-        if float(d.get("weight") or 0) > 0:
-            return True
-    except (TypeError, ValueError):
-        pass
-    try:
-        if float(d.get("height") or 0) > 0:
-            return True
-    except (TypeError, ValueError):
-        pass
-    try:
-        if int(d.get("age") or 0) > 0:
-            return True
-    except (TypeError, ValueError):
-        pass
-    return False
-
-
 def _budget_from_payload(data: dict) -> tuple[float | None, str | None, float | None]:
     """Возвращает (budget_weekly, budget_tier, budget_custom)."""
     tier = (data.get("budget") or data.get("budget_tier") or "").strip().lower()
@@ -107,23 +69,23 @@ def _budget_from_payload(data: dict) -> tuple[float | None, str | None, float | 
     bw = data.get("budget_weekly")
 
     if tier == "economy":
-        return TIER_PRESET_RUB["economy"], "economy", None
+        return 1500.0, "economy", None
     if tier == "medium":
-        return TIER_PRESET_RUB["medium"], "medium", None
+        return 2500.0, "medium", None
     if tier == "unlimited":
-        return UNLIMITED_DB_RUB, "unlimited", None
+        return 50000.0, "unlimited", None
     if tier == "custom":
         try:
             v = float(custom_amt) if custom_amt is not None else float(bw or 0)
         except (TypeError, ValueError):
-            v = DEFAULT_WEEKLY_RUB
+            v = 2000.0
         return max(0.0, v), "custom", v
     if bw is not None:
         try:
             return float(bw), tier or None, float(custom_amt) if custom_amt is not None else None
         except (TypeError, ValueError):
             pass
-    return DEFAULT_WEEKLY_RUB, "medium", None
+    return 2500.0, "medium", None
 
 
 # ── GET /api/profile ──────────────────────────────────────────────────────────
@@ -145,23 +107,9 @@ def get_profile():
         return jsonify({"exists": False})
 
     internal_id = row["id"]
-    d0 = dict(row)
-    done = int(d0.get("onboarding_completed") or 0) == 1
-    if not done and _user_row_looks_onboarded(d0):
-        try:
-            conn.execute(
-                "UPDATE users SET onboarding_completed = 1 WHERE id = ?",
-                (internal_id,),
-            )
-            conn.commit()
-            done = True
-        except sqlite3.OperationalError:
-            # Старая БД без колонки — не блокируем GET; миграция добавит её при старте приложения.
-            conn.rollback()
-            done = True
-
     training = _collect_training(conn, internal_id)
     excluded = _collect_prefs(conn, internal_id)
+    done = int(row["onboarding_completed"] or 0) == 1
     conn.close()
 
     if not done:
@@ -214,6 +162,14 @@ def put_profile():
     if kitchen and kitchen not in ("home", "mixed", "out"):
         kitchen = "home"
 
+    sex = (data.get("sex") or "male").strip()
+    if sex not in ("male", "female"):
+        sex = "male"
+
+    activity = (data.get("activity_level") or "moderate").strip()
+    if activity not in ("sedentary", "light", "moderate", "active", "very_active"):
+        activity = "moderate"
+
     raw_td = data.get("training_days") or []
     if not isinstance(raw_td, list):
         raw_td = []
@@ -248,9 +204,11 @@ def put_profile():
                 budget_weekly = ?,
                 budget_tier   = ?,
                 budget_custom = ?,
-                kitchen_type  = COALESCE(?, kitchen_type),
-                wake_time     = ?,
-                sleep_time    = ?,
+                kitchen_type   = COALESCE(?, kitchen_type),
+                wake_time      = ?,
+                sleep_time     = ?,
+                sex            = ?,
+                activity_level = ?,
                 onboarding_completed = 1
             WHERE id = ?
             """,
@@ -260,6 +218,7 @@ def put_profile():
                 bw, budget_tier, budget_custom,
                 kitchen,
                 wake, sleep,
+                sex, activity,
                 internal_id,
             ),
         )
@@ -271,8 +230,9 @@ def put_profile():
                 goal, goal_custom,
                 budget_weekly, budget_tier, budget_custom,
                 kitchen_type, wake_time, sleep_time,
+                sex, activity_level,
                 onboarding_completed
-            ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, 1)
+            ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, 1)
             """,
             (
                 tid,
@@ -284,6 +244,7 @@ def put_profile():
                 bw, budget_tier, budget_custom,
                 kitchen,
                 wake, sleep,
+                sex, activity,
             ),
         )
         internal_id = cur.lastrowid
@@ -332,9 +293,6 @@ def get_profile_stats():
         return jsonify({"error": "user_id должен быть числом"}), 400
 
     conn = get_db()
-    ensure_schema_migrations(conn)
-    conn.commit()
-
     row = _user_row_by_telegram(conn, tid)
     if not row:
         conn.close()
@@ -388,22 +346,10 @@ def _calc_stats(conn, internal_id: int) -> dict:
         (internal_id,),
     ).fetchall()
 
-    # 2b. Позиции завершённых закупок (после «Завершить») — разбивка по тем же правилам, что и список
-    rows_lines = conn.execute(
-        """
-        SELECT product_name AS product_name, amount_rub AS cost
-        FROM shopping_spend_lines
-        WHERE user_id = ?
-          AND COALESCE(amount_rub, 0) > 0
-          AND date(COALESCE(created_at, '1970-01-01')) >= date('now', '-7 days')
-        """,
-        (internal_id,),
-    ).fetchall()
-
-    # 2c. Старые суммы «за поездку» без позиций (до shopping_spend_lines)
+    # 2b. Завершённые закупки: POST /api/shopping/complete пишет сюда и удаляет shopping_list
     row_log = conn.execute(
         """
-        SELECT COALESCE(SUM(amount), 0) AS trip_total
+        SELECT SUM(amount) AS trip_total
         FROM shopping_spend_log
         WHERE user_id = ?
           AND COALESCE(amount, 0) > 0
@@ -422,29 +368,21 @@ def _calc_stats(conn, internal_id: int) -> dict:
         category_totals[cat] = category_totals.get(cat, 0.0) + cost
         total_spend += cost
 
-    lines_total = 0.0
-    for row in rows_lines:
-        name = row["product_name"] or ""
-        cost = float(row["cost"] or 0)
-        lines_total += cost
-        cat = classify_product(name)
-        category_totals[cat] = category_totals.get(cat, 0.0) + cost
-        total_spend += cost
+    trip_total = float(row_log["trip_total"] or 0) if row_log else 0.0
+    if trip_total > 0:
+        category_totals["grocery_trips"] += trip_total
+        total_spend += trip_total
 
-    trip_log_total = float(row_log["trip_total"] or 0) if row_log else 0.0
-    orphan = max(0.0, trip_log_total - lines_total)
-    if orphan > 0:
-        category_totals["other"] = category_totals.get("other", 0.0) + orphan
-        total_spend += orphan
-
-    # Темы «Питание за неделю»: фиксированный порядок, только ненулевые суммы
-    spend_by_category: list[dict] = []
-    for theme_key, theme_label, internal_keys in PROFILE_SPEND_THEMES:
-        amt = sum(category_totals.get(k, 0.0) for k in internal_keys)
-        if amt > 0:
-            spend_by_category.append(
-                {"key": theme_key, "label": theme_label, "amount": round(amt)}
-            )
+    # Только непустые категории, отсортированные по убыванию суммы
+    spend_by_category = sorted(
+        [
+            {"key": k, "label": CATEGORIES[k], "amount": round(category_totals[k])}
+            for k in CATEGORIES
+            if category_totals[k] > 0
+        ],
+        key=lambda x: x["amount"],
+        reverse=True,
+    )
 
     return {
         "avg_kcal":           avg_kcal,
