@@ -1,5 +1,6 @@
 import { useCallback, useEffect, useMemo, useRef, useState } from "react";
 import { apiGet, apiPost, apiPatch } from "../api/client";
+import { formatApiError, toastApiError } from "../lib/apiErrors";
 import StockEmptyGlyph from "../components/StockEmptyGlyph";
 
 const UNIT_OPTIONS = ["г", "мл", "шт", "кг"];
@@ -138,7 +139,7 @@ export default function ShoppingTab({
       hadCartLoadedRef.current = true;
       onCartChange?.();
     } catch (e) {
-      setError(e.message || "Ошибка");
+      setError(formatApiError(e));
     } finally {
       if (!silent) setIsCartFetching(false);
     }
@@ -180,8 +181,8 @@ export default function ShoppingTab({
     try {
       await fn();
     } catch (e) {
-      setError(e.message || "Ошибка");
-      showToast(e.message || "Ошибка", "error");
+      setError(formatApiError(e));
+      toastApiError(showToast, e);
     } finally {
       setLoading(false);
     }
@@ -219,7 +220,7 @@ export default function ShoppingTab({
         });
         await loadCart({ silent: true });
       } catch (e) {
-        showToast(e.message || "Ошибка", "error");
+        showToast(formatApiError(e), "error");
       }
     })();
   };

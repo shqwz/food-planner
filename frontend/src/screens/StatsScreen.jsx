@@ -1,5 +1,6 @@
 import { useCallback, useEffect, useRef, useState } from "react";
 import { apiGet } from "../api/client";
+import { formatApiError } from "../lib/apiErrors";
 
 // ─── константы ────────────────────────────────────────────────────────────────
 
@@ -106,7 +107,7 @@ export default function StatsScreen({ userId }) {
       const data = await apiGet("/api/profile/stats", { user_id: userId, year: y, month: m });
       setStats(data);
     } catch (e) {
-      setError(e.message);
+      setError(formatApiError(e));
     } finally {
       setLoading(false);
     }

@@ -1,5 +1,6 @@
 import { useCallback, useEffect, useMemo, useState } from "react";
 import { apiGet, apiPost } from "../api/client";
+import { formatApiError, toastApiError } from "../lib/apiErrors";
 import PlanMenuModal from "./PlanMenuModal";
 
 // ─── константы ────────────────────────────────────────────────────────────────
@@ -184,7 +185,7 @@ export default function PlanTab({
       if (cancelled) return;
       setLoading(true);
       loadWindow()
-        .catch((e) => { if (!cancelled) setError(e.message); })
+        .catch((e) => { if (!cancelled) setError(formatApiError(e)); })
         .finally(() => { if (!cancelled) setLoading(false); });
     });
     return () => { cancelled = true; };
@@ -273,7 +274,7 @@ export default function PlanTab({
     try {
       await runGenerate({ period, ...(start_from ? { start_from } : {}) });
     } catch (e) {
-      showToast(e.message, "error");
+      showToast(formatApiError(e), "error");
     }
   };
 
@@ -282,7 +283,7 @@ export default function PlanTab({
       await runGenerate({ period: "week" });
       onPlanExtendNoticeDismiss?.();
     } catch (e) {
-      showToast(e.message, "error");
+      showToast(formatApiError(e), "error");
     }
   };
 
@@ -337,7 +338,7 @@ export default function PlanTab({
       setSelectedMealIdx(0);
       setModalStep(mode === "plan" ? "plan_meal" : "plan_over_slider");
     } catch (e) {
-      showToast(e.message, "error");
+      showToast(formatApiError(e), "error");
       setModalStep("pick"); setEntryMode("");
     } finally { setPlanLoading(false); }
   };
@@ -359,7 +360,7 @@ export default function PlanTab({
       );
       setAnalyzedMeal({ dish_name: res.dish_name || "Приём пищи", ingredients: ingredients.map((i) => ({ name: i.name, amount: Number(i.amount) || 0, unit: i.unit || "г", kcal: Number(i.kcal) || 0, protein: Number(i.protein) || 0, fat: Number(i.fat) || 0, carbs: Number(i.carbs) || 0, cost: Number(i.cost) || 0 })), totals });
       setModalStep("other_preview");
-    } catch (e) { showToast(e.message, "error"); } finally { setAnalyzeLoading(false); }
+    } catch (e) { showToast(formatApiError(e), "error"); } finally { setAnalyzeLoading(false); }
   };
 
   const submitDiaryPost = async (payload) => {
@@ -369,7 +370,7 @@ export default function PlanTab({
       showToast("Приём записан", "success");
       closeModal();
       await refreshDiary();
-    } catch (e) { showToast(e.message, "error"); } finally { setSubmitting(false); }
+    } catch (e) { toastApiError(showToast, e, { context: "diary_save" }); } finally { setSubmitting(false); }
   };
 
   const submitFromPlan = async (opts) => {

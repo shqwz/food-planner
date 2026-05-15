@@ -1,5 +1,6 @@
 import { useCallback, useEffect, useMemo, useState } from "react";
 import { apiDelete, apiGet, apiPost } from "../api/client";
+import { formatApiError, toastApiError } from "../lib/apiErrors";
 import { IconCloseSmall, IconSearch } from "../components/ui-icons";
 import StockEmptyGlyph from "../components/StockEmptyGlyph";
 
@@ -20,7 +21,7 @@ function pantryPriceLabel(unit) {
   }
 }
 
-function AddPantryModal({ userId, onClose, onAdded }) {
+function AddPantryModal({ userId, onClose, onAdded, showToast }) {
   const [name, setName] = useState("");
   const [suggestions, setSuggestions] = useState([]);
   const [amount, setAmount] = useState("");
@@ -66,7 +67,8 @@ function AddPantryModal({ userId, onClose, onAdded }) {
       onAdded();
       onClose();
     } catch (e) {
-      alert(e.message || "Ошибка");
+      if (showToast) toastApiError(showToast, e);
+      else window.alert(formatApiError(e));
     } finally {
       setSaving(false);
     }
@@ -231,7 +233,7 @@ export default function PantryTab({ showToast, userId, embedded = false }) {
       const data = await apiGet("/api/pantry", { user_id: userId });
       setProducts(data);
     } catch (e) {
-      setError(e.message);
+      setError(formatApiError(e));
     } finally {
       if (!soft) setLoading(false);
     }
@@ -256,7 +258,7 @@ export default function PantryTab({ showToast, userId, embedded = false }) {
       await loadPantry({ soft: true });
       showToast("Очищено", "success");
     } catch (e) {
-      showToast(e.message || "Ошибка", "error");
+      toastApiError(showToast, e);
     } finally {
       setClearing(false);
     }
@@ -367,6 +369,7 @@ export default function PantryTab({ showToast, userId, embedded = false }) {
       {addModal && (
         <AddPantryModal
           userId={userId}
+          showToast={showToast}
           onClose={() => setAddModal(false)}
           onAdded={() => loadPantry({ soft: true })}
         />

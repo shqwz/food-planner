@@ -1,7 +1,10 @@
-import { useEffect, useRef, useState } from "react";
+import { useLayoutEffect, useRef, useState } from "react";
 import { disableTelegramVerticalSwipes } from "../lib/telegram";
 
 export const DRUM_ITEM_H = 40;
+
+/** Нечётное число копий списка: запас сверху и снизу + «рабочая» полоса по центру. */
+const DRUM_CIRCULAR_COPIES = 9;
 
 function wrapIndex(i, n) {
   if (!n) return 0;
@@ -17,48 +20,55 @@ export default function DrumPicker({ items, value, onChange, width = 72, circula
   const dragRef = useRef(null);
   const draggingRef = useRef(false);
   const [dragIdx, setDragIdx] = useState(null);
+  const [centerRowIndex, setCenterRowIndex] = useState(0);
 
   const idx = items.indexOf(value);
   const selIdx = idx === -1 ? 0 : idx;
-  const displayIdx = dragIdx ?? selIdx;
   const n = items.length;
-  const totalRows = circular && n > 0 ? n * 2 : n;
+
+  const midCopy = circular && n > 0 ? Math.floor(DRUM_CIRCULAR_COPIES / 2) : 0;
+  /** Допустимый индекс физической строки у окна выбора, без перебора while на каждый move. */
+  const vrLow = (midCopy - 1) * n;
+  const vrHigh = (midCopy + 2) * n - 1;
+  const totalRows = circular && n > 0 ? DRUM_CIRCULAR_COPIES * n : n;
 
   const yForVirtual = (virtualRow) => (2 - virtualRow) * DRUM_ITEM_H;
-  const stableVirtualRow = (canonicalIdx) => n + canonicalIdx;
 
+  function physicalRowAfterApply(canonicalIdx) {
+    return circular && n > 0 ? midCopy * n + canonicalIdx : canonicalIdx;
+  }
+
+  /** O(1): удерживаем центр окна по физической строке в допустимом коридоре (не тысячи while). */
   function recenterCircularTranslate(rawY, el) {
     if (!circular || n <= 0 || !el) return rawY;
-    let newY = rawY;
-    let vr = Math.round(2 - newY / DRUM_ITEM_H);
-    while (vr < n) {
-      newY += n * DRUM_ITEM_H;
-      vr = Math.round(2 - newY / DRUM_ITEM_H);
+    const H = DRUM_ITEM_H;
+    let Y = rawY;
+    let vr = Math.round(2 - Y / H);
+    if (vr < vrLow) {
+      const hop = Math.ceil((vrLow - vr) / n);
+      Y += hop * n * H;
+    } else if (vr > vrHigh) {
+      const hop = Math.ceil((vr - vrHigh) / n);
+      Y -= hop * n * H;
     }
-    while (vr >= 2 * n) {
-      newY -= n * DRUM_ITEM_H;
-      vr = Math.round(2 - newY / DRUM_ITEM_H);
-    }
+    vr = Math.round(2 - Y / H);
+    if (vr < vrLow) Y += n * H;
+    else if (vr > vrHigh) Y -= n * H;
     el.style.transition = "none";
-    el.style.transform = `translateY(${newY}px)`;
-    return newY;
+    el.style.transform = `translateY(${Y}px)`;
+    return Y;
   }
 
-  function applyTranslate(canonicalIndex) {
+  useLayoutEffect(() => {
+    if (draggingRef.current) return;
     const el = innerRef.current;
     if (!el) return;
+    const vr =
+      circular && n > 0 ? midCopy * n + selIdx : selIdx;
     el.style.transition = "none";
-    const y =
-      circular && n > 0
-        ? yForVirtual(stableVirtualRow(canonicalIndex))
-        : yForVirtual(canonicalIndex);
-    el.style.transform = `translateY(${y}px)`;
-  }
-
-  useEffect(() => {
-    if (draggingRef.current) return;
-    applyTranslate(selIdx);
-  }, [value, selIdx, circular, n]);
+    el.style.transform = `translateY(${yForVirtual(vr)}px)`;
+    setCenterRowIndex(Math.max(0, Math.min(totalRows - 1, vr)));
+  }, [value, selIdx, circular, n, midCopy, totalRows]);
 
   function currentY() {
     const el = innerRef.current;
@@ -66,9 +76,7 @@ export default function DrumPicker({ items, value, onChange, width = 72, circula
     const m = t?.match(/translateY\(([-\d.]+)px\)/);
     if (m) return parseFloat(m[1]);
     if (!el) return 0;
-    return circular && n > 0
-      ? yForVirtual(stableVirtualRow(selIdx))
-      : yForVirtual(selIdx);
+    return yForVirtual(physicalRowAfterApply(selIdx));
   }
 
   function snapToNearest(rawY) {
@@ -80,9 +88,10 @@ export default function DrumPicker({ items, value, onChange, width = 72, circula
     const el = innerRef.current;
     if (!el) return;
     el.style.transition = "transform 0.18s ease";
-    const targetY =
-      circular && n > 0 ? yForVirtual(stableVirtualRow(picked)) : yForVirtual(picked);
+    const targetRow = physicalRowAfterApply(picked);
+    const targetY = yForVirtual(targetRow);
     el.style.transform = `translateY(${targetY}px)`;
+    setCenterRowIndex(Math.max(0, Math.min(totalRows - 1, targetRow)));
     if (items[picked] !== value) {
       onChange(items[picked]);
     }
@@ -98,6 +107,9 @@ export default function DrumPicker({ items, value, onChange, width = 72, circula
       initialTranslateY: currentY(),
     };
     setDragIdx(selIdx);
+    const cy = currentY();
+    const cr = Math.max(0, Math.min(totalRows - 1, Math.round(2 - cy / DRUM_ITEM_H)));
+    setCenterRowIndex(cr);
     const el = innerRef.current;
     if (el) el.style.transition = "none";
   }
@@ -111,9 +123,14 @@ export default function DrumPicker({ items, value, onChange, width = 72, circula
     if (circular && n > 0) {
       newY = recenterCircularTranslate(newY, el);
     } else {
+      const yMin = yForVirtual(Math.max(0, n - 1));
+      const yMax = yForVirtual(0);
+      newY = Math.max(yMin, Math.min(yMax, newY));
       el.style.transition = "none";
       el.style.transform = `translateY(${newY}px)`;
     }
+    const vr = Math.max(0, Math.min(totalRows - 1, Math.round(2 - newY / DRUM_ITEM_H)));
+    setCenterRowIndex(vr);
     const live = 2 - newY / DRUM_ITEM_H;
     const liveIdx =
       circular && n > 0
@@ -153,7 +170,7 @@ export default function DrumPicker({ items, value, onChange, width = 72, circula
         {Array.from({ length: totalRows }, (_, r) => {
           const canonicalIdx = n > 0 ? ((r % n) + n) % n : 0;
           const item = items[canonicalIdx];
-          const highlighted = canonicalIdx === displayIdx;
+          const highlighted = r === centerRowIndex;
           return (
             <div
               key={`r-${r}`}

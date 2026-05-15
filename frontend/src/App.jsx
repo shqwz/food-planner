@@ -109,10 +109,13 @@ export default function App() {
     localStorage.setItem(THEME_KEY, themeMode);
   }, [themeMode]);
 
-  /** @param {string} text @param {'success'|'error'|'info'|'neutral'} [tone] */
-  const showToast = (text, tone = "neutral") => {
+  /** @param {string} text @param {'success'|'error'|'info'|'neutral'} [tone] @param {number} [durationMs] */
+  const showToast = (text, tone = "neutral", durationMs) => {
+    const fallback =
+      tone === "error" ? 7200 : tone === "info" ? 3600 : 2800;
+    const ms = durationMs ?? fallback;
     setNotice({ text, tone, at: Date.now() });
-    setTimeout(() => setNotice(null), 2800);
+    setTimeout(() => setNotice(null), ms);
   };
 
   const commonProps = { showToast, userId: user.telegramId };
@@ -214,6 +217,7 @@ export default function App() {
           profile={profile}
           onProfileUpdated={refetchProfile}
           onClose={() => setShowProfile(false)}
+          showToast={showToast}
           onEdit={() => {
             setShowProfile(false);
             setWizardEdit(true);

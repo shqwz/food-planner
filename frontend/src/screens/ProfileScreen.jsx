@@ -1,5 +1,6 @@
 import { useEffect, useRef, useState } from "react";
 import { apiGet, apiPut } from "../api/client";
+import { toastApiError } from "../lib/apiErrors";
 import DrumPicker from "../components/DrumPicker";
 
 // ─────────────────────────────────────────────────────────────────────────────
@@ -129,7 +130,7 @@ function Section({ label, children, editMode, onTap, dimmed, style }) {
 // Основной компонент
 // ─────────────────────────────────────────────────────────────────────────────
 
-export default function ProfileScreen({ profile, onClose, userId, onProfileUpdated }) {
+export default function ProfileScreen({ profile, onClose, userId, onProfileUpdated, showToast }) {
   const [stats, setStats]           = useState(null);
   const [statsLoading, setLoading]  = useState(true);
   const [editMode, setEditMode]     = useState(false);
@@ -303,11 +304,12 @@ export default function ProfileScreen({ profile, onClose, userId, onProfileUpdat
 
       await apiPut("/api/profile", base);
       if (onProfileUpdated) await onProfileUpdated();
+      setOpenCard(null);
     } catch (e) {
       console.error("Ошибка сохранения:", e);
+      if (showToast) toastApiError(showToast, e);
     } finally {
       setSaving(false);
-      setOpenCard(null);
     }
   }
 

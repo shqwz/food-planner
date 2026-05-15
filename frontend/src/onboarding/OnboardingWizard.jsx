@@ -1,5 +1,6 @@
 import { useEffect, useState } from "react";
 import { apiPut } from "../api/client";
+import { formatApiError } from "../lib/apiErrors";
 import OnboardingStep1 from "./OnboardingStep1";
 import OnboardingStep2 from "./OnboardingStep2";
 import OnboardingStep3 from "./OnboardingStep3";
@@ -116,7 +117,7 @@ export default function OnboardingWizard({ userId, mode = "onboard", initialProf
       await apiPut("/api/profile", buildPayload(f));
       onDone?.();
     } catch (e) {
-      setErr(e.message || "Ошибка сохранения");
+      setErr(formatApiError(e));
     } finally {
       setSaving(false);
     }

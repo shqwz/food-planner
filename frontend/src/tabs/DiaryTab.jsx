@@ -1,5 +1,6 @@
 import { useCallback, useEffect, useMemo, useState } from "react";
 import { apiGet, apiPost } from "../api/client";
+import { formatApiError, toastApiError } from "../lib/apiErrors";
 
 const GOAL = { kcal: 2200, protein: 140, fat: 70, carbs: 230 };
 
@@ -157,7 +158,7 @@ export default function DiaryTab({ showToast, userId }) {
         setError("");
         await Promise.all([refreshDiary(), refreshTodayPlan()]);
       } catch (e) {
-        setError(e.message);
+        setError(formatApiError(e));
       } finally {
         setLoading(false);
       }
@@ -262,7 +263,7 @@ export default function DiaryTab({ showToast, userId }) {
         setModalStep("plan_over_slider");
       }
     } catch (e) {
-      showToast(e.message, "error");
+      showToast(formatApiError(e), "error");
       setModalStep("pick");
       setEntryMode("");
     } finally {
@@ -315,7 +316,7 @@ export default function DiaryTab({ showToast, userId }) {
       });
       setModalStep("other_preview");
     } catch (e) {
-      showToast(e.message, "error");
+      showToast(formatApiError(e), "error");
     } finally {
       setAnalyzeLoading(false);
     }
@@ -329,7 +330,7 @@ export default function DiaryTab({ showToast, userId }) {
       closeModal();
       await Promise.all([refreshDiary(), refreshTodayPlan()]);
     } catch (e) {
-      showToast(e.message, "error");
+      toastApiError(showToast, e, { context: "diary_save" });
     } finally {
       setSubmitting(false);
     }
