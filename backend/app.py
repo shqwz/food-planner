@@ -1,4 +1,4 @@
-from flask import Flask, request, jsonify, send_from_directory
+from flask import Flask, request, jsonify, send_from_directory, make_response
 from database import get_db, init_db, seed_products, seed_default_user, ensure_schema_migrations
 from plan import plan_bp
 from diary import diary_bp
@@ -275,16 +275,26 @@ def search_products():
 # ============================================================
 @app.route("/")
 def serve_index():
-    """Отдаёт index.html (собранный React)"""
-    return send_from_directory(app.static_folder, "index.html")
+    """Отдаёт index.html (собранный React). Без кэша — иначе Telegram WebView держит старый бандл."""
+    resp = make_response(send_from_directory(app.static_folder, "index.html"))
+    resp.headers["Cache-Control"] = "no-cache, no-store, must-revalidate"
+    resp.headers["Pragma"] = "no-cache"
+    return resp
 
 
 @app.route("/<path:path>")
 def serve_static(path):
     """Отдаёт остальные статические файлы (JS, CSS)"""
     if os.path.exists(os.path.join(app.static_folder, path)):
-        return send_from_directory(app.static_folder, path)
-    return send_from_directory(app.static_folder, "index.html")
+        resp = make_response(send_from_directory(app.static_folder, path))
+    else:
+        resp = make_response(send_from_directory(app.static_folder, "index.html"))
+        resp.headers["Cache-Control"] = "no-cache, no-store, must-revalidate"
+        resp.headers["Pragma"] = "no-cache"
+        return resp
+    if path.startswith("assets/"):
+        resp.headers["Cache-Control"] = "public, max-age=31536000, immutable"
+    return resp
 
 
 # ============================================================
