@@ -1746,6 +1746,116 @@ html[data-theme="dark"] .plan-meal-card--breakfast .plan-meal-card__kcal {
   border-radius: var(--r-lg);
   padding: 14px 16px;
   margin-bottom: 10px;
+  min-width: 0;
+  max-width: 100%;
+  overflow: hidden;
+}
+
+.profile-birth-input {
+  display: block;
+  width: 100%;
+  max-width: 100%;
+  min-width: 0;
+  box-sizing: border-box;
+  margin-bottom: 14px;
+  padding: 8px 10px;
+  border-radius: var(--r-md);
+  border: 0.5px solid var(--c-border-mid);
+  background: var(--c-surface2);
+  color: var(--c-text-primary);
+  font-size: 16px;
+  font-weight: 500;
+  font-family: var(--font);
+  line-height: 1.35;
+  -webkit-appearance: none;
+  appearance: none;
+}
+.profile-birth-input::-webkit-date-and-time-value {
+  text-align: left;
+  min-width: 0;
+  max-width: 100%;
+}
+.profile-edit-personal {
+  min-width: 0;
+  max-width: 100%;
+}
+
+/* DrumPicker — время в профиле и онбординге */
+.drum-picker {
+  height: 200px;
+  overflow: hidden;
+  position: relative;
+  border-radius: var(--r-md);
+  background: var(--c-surface2);
+  touch-action: none;
+  user-select: none;
+  cursor: grab;
+  flex-shrink: 0;
+}
+.drum-picker__inner {
+  display: flex;
+  flex-direction: column;
+}
+.drum-picker__row {
+  height: 40px;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  font-size: 15px;
+  font-weight: 400;
+  color: var(--c-text-secondary);
+  flex-shrink: 0;
+  transition: font-size 0.1s, color 0.1s;
+}
+.drum-picker__row--active {
+  font-size: 20px;
+  font-weight: 500;
+  color: var(--c-text-primary);
+}
+.drum-picker__fade {
+  position: absolute;
+  left: 0;
+  right: 0;
+  height: 80px;
+  pointer-events: none;
+}
+.drum-picker__fade--top {
+  top: 0;
+  background: linear-gradient(to bottom, var(--c-surface2), transparent);
+}
+.drum-picker__fade--bottom {
+  bottom: 0;
+  background: linear-gradient(to top, var(--c-surface2), transparent);
+}
+.drum-picker__line {
+  position: absolute;
+  left: 0;
+  right: 0;
+  height: 0.5px;
+  background: var(--c-border-mid);
+  pointer-events: none;
+}
+.drum-picker__line--top {
+  top: 80px;
+}
+.drum-picker__line--bottom {
+  bottom: 80px;
+}
+
+.time-drum-picker {
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  gap: 8px;
+  width: 100%;
+}
+.time-drum-picker__sep {
+  font-size: 22px;
+  font-weight: 500;
+  line-height: 1;
+  color: var(--c-text-secondary);
+  padding-bottom: 2px;
+  flex-shrink: 0;
 }
 
 .modal-loading {

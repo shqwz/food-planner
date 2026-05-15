@@ -1,4 +1,4 @@
-import TimeWheelPicker from "./TimeWheelPicker";
+import TimeDrumPicker from "../components/TimeDrumPicker";
 
 function timeToMinutes(t) {
   const [h, m] = (t || "00:00").split(":").map(Number);
@@ -27,7 +27,7 @@ export default function OnboardingStep4({ value, onChange }) {
         <div className="field-label" id="ob-wake-time-label">
           Время подъёма
         </div>
-        <TimeWheelPicker
+        <TimeDrumPicker
           value={wake}
           onChange={(t) => set("wake_time", t)}
           labelledBy="ob-wake-time-label"
@@ -38,7 +38,7 @@ export default function OnboardingStep4({ value, onChange }) {
         <div className="field-label" id="ob-sleep-time-label">
           Время отхода ко сну
         </div>
-        <TimeWheelPicker
+        <TimeDrumPicker
           value={sleep}
           onChange={(t) => set("sleep_time", t)}
           labelledBy="ob-sleep-time-label"
