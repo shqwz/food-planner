@@ -84,6 +84,16 @@ def ensure_schema_migrations(conn=None):
             FOREIGN KEY (user_id) REFERENCES users(id)
         )"""
         )
+        conn.execute(
+            """CREATE TABLE IF NOT EXISTS shopping_spend_lines (
+            id INTEGER PRIMARY KEY AUTOINCREMENT,
+            user_id INTEGER NOT NULL,
+            product_name TEXT NOT NULL,
+            amount_rub REAL NOT NULL,
+            created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
+            FOREIGN KEY (user_id) REFERENCES users(id)
+        )"""
+        )
 
         u_cols = {row[1] for row in conn.execute("PRAGMA table_info(users)").fetchall()}
         if u_cols:

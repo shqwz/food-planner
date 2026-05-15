@@ -59,7 +59,7 @@ CREATE TABLE IF NOT EXISTS pantry (
     product_id INTEGER NOT NULL,
     amount REAL NOT NULL,           -- текущее количество
     price_per_unit REAL DEFAULT 0,  -- цена за единицу (кг/л/шт)
-    expiry_date TEXT,               -- срок годности (YYYY-MM-DD)
+    expiry_date TEXT,               -- устарело, не используется
     added_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
     FOREIGN KEY (user_id) REFERENCES users(id),
     FOREIGN KEY (product_id) REFERENCES products_ref(id)
@@ -154,6 +154,16 @@ CREATE TABLE IF NOT EXISTS shopping_spend_log (
     user_id INTEGER NOT NULL,
     amount REAL NOT NULL,
     note TEXT,
+    created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
+    FOREIGN KEY (user_id) REFERENCES users(id)
+);
+
+-- Позиции завершённых закупок (для статистики по категориям еды)
+CREATE TABLE IF NOT EXISTS shopping_spend_lines (
+    id INTEGER PRIMARY KEY AUTOINCREMENT,
+    user_id INTEGER NOT NULL,
+    product_name TEXT NOT NULL,
+    amount_rub REAL NOT NULL,
     created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
     FOREIGN KEY (user_id) REFERENCES users(id)
 );

@@ -1,13 +1,12 @@
 import { useCallback, useEffect, useMemo, useState } from "react";
-import PantryTab from "./tabs/PantryTab";
 import PlanTab from "./tabs/PlanTab";
-import DiaryTab from "./tabs/DiaryTab";
-import ShoppingTab from "./tabs/ShoppingTab";
+import StatsScreen from "./screens/StatsScreen";
+import StockScreen from "./screens/StockScreen";
 import BottomNav from "./components/BottomNav";
 import { IconMoon, IconSun } from "./components/ui-icons";
 import OnboardingWizard from "./onboarding/OnboardingWizard";
 import ProfileScreen from "./screens/ProfileScreen";
-import { getTelegramColorScheme, resolveAppUserIdentity, fetchTelegramIdentityFromServer, isTelegramMiniAppShell } from "./lib/telegram";
+import { getTelegramColorScheme, initTelegramWebApp } from "./lib/telegram";
 import { apiGet } from "./api/client";
 
 const THEME_KEY = "food-planner-theme";
@@ -24,7 +23,15 @@ function initialsFromName(name) {
 }
 
 export default function App() {
-  const [user, setUser] = useState(() => resolveAppUserIdentity());
+  const [user, setUser] = useState(() => {
+    // В Telegram WebApp читаем реальный ID; в dev-режиме используем 123456789
+    const tg = typeof window !== "undefined" ? window.Telegram?.WebApp : null;
+    const tgUser = tg?.initDataUnsafe?.user;
+    const telegramId = tgUser?.id ?? 123456789;
+    const name = tgUser?.first_name ?? "Алексей";
+    const initials = name ? name[0].toUpperCase() : "А";
+    return { name, avatar: initials, telegramId };
+  });
   const [activeTab, setActiveTab] = useState("plan");
   const [themeMode, setThemeMode] = useState(() => {
     const v = localStorage.getItem(THEME_KEY);
@@ -41,6 +48,8 @@ export default function App() {
   const [profileLoading, setProfileLoading] = useState(true);
   const [showProfile, setShowProfile] = useState(false);
   const [wizardEdit, setWizardEdit] = useState(false);
+  /** Баннер «план заканчивается» — один раз за сессию (до перезагрузки). */
+  const [planExtendNoticeDismissed, setPlanExtendNoticeDismissed] = useState(false);
 
   const todayFormatted = useMemo(
     () =>
@@ -55,7 +64,6 @@ export default function App() {
   );
 
   const refetchProfile = useCallback(async () => {
-    if (user.telegramId == null) return null;
     const p = await apiGet("/api/profile", { user_id: user.telegramId });
     setProfile(p);
     if (p.exists && p.name) {
@@ -65,57 +73,14 @@ export default function App() {
   }, [user.telegramId]);
 
   useEffect(() => {
-    let cancelled = false;
-    const delays = [0, 200, 600, 1500, 3000];
-    const ids = delays.map((ms) =>
-      window.setTimeout(async () => {
-        if (cancelled) return;
-        const sync = resolveAppUserIdentity();
-        if (sync.telegramId != null) {
-          setUser((p) => (p.telegramId === sync.telegramId && p.name === sync.name ? p : sync));
-          return;
-        }
-        const fromServer = await fetchTelegramIdentityFromServer();
-        if (cancelled || fromServer?.telegramId == null) return;
-        setUser((p) =>
-          p.telegramId === fromServer.telegramId && p.name === fromServer.name ? p : fromServer,
-        );
-      }, ms),
-    );
-    const tg = typeof window !== "undefined" ? window.Telegram?.WebApp : null;
-    const onActivated = () => {
-      if (cancelled) return;
-      const sync = resolveAppUserIdentity();
-      if (sync.telegramId != null) {
-        setUser((p) => (p.telegramId === sync.telegramId && p.name === sync.name ? p : sync));
-      }
-    };
-    if (tg?.onEvent) {
-      try {
-        tg.onEvent("activated", onActivated);
-      } catch {
-        /* ignore */
-      }
-    }
-    return () => {
-      cancelled = true;
-      ids.forEach((id) => window.clearTimeout(id));
-      if (tg?.offEvent) {
-        try {
-          tg.offEvent("activated", onActivated);
-        } catch {
-          /* ignore */
-        }
-      }
-    };
+    initTelegramWebApp();
   }, []);
 
   useEffect(() => {
-    if (user.telegramId == null) {
-      setProfile(null);
-      setProfileLoading(false);
-      return undefined;
-    }
+    setPlanExtendNoticeDismissed(false);
+  }, [user.telegramId]);
+
+  useEffect(() => {
     let cancelled = false;
     (async () => {
       setProfileLoading(true);
@@ -151,37 +116,6 @@ export default function App() {
   };
 
   const commonProps = { showToast, userId: user.telegramId };
-
-  if (user.telegramId == null) {
-    const inTgShell = isTelegramMiniAppShell();
-    return (
-      <div className="app">
-        <div className="content" style={{ padding: 24 }}>
-          <div className="card" style={{ padding: 20, maxWidth: 420, margin: "0 auto" }}>
-            <p style={{ margin: "0 0 10px", fontWeight: 700, fontSize: 17 }}>Нужен пользователь</p>
-            <p style={{ margin: "0 0 14px", color: "var(--c-text-secondary)", fontSize: 14, lineHeight: 1.5 }}>
-              Откройте приложение как <strong>Mini App внутри Telegram</strong> — подставится ваш аккаунт.
-            </p>
-            {inTgShell && (
-              <p style={{ margin: "0 0 14px", color: "var(--c-text-secondary)", fontSize: 14, lineHeight: 1.5 }}>
-                Telegram уже открыл WebView, но данные пользователя не пришли. Убедитесь, что на сервере задан{" "}
-                <code style={{ fontSize: 13 }}>TELEGRAM_BOT_TOKEN</code> того же бота, что открывает Mini App, и
-                откройте приложение через <strong>inline-кнопку Web App</strong> или меню бота (не обычную ссылку в
-                чат).
-              </p>
-            )}
-            <p style={{ margin: 0, color: "var(--c-text-secondary)", fontSize: 14, lineHeight: 1.5 }}>
-              На <code style={{ fontSize: 13 }}>localhost</code> / <code style={{ fontSize: 13 }}>127.0.0.1</code> без
-              Telegram автоматически используется демо-пользователь <code style={{ fontSize: 13 }}>123456789</code>.
-              В режиме <code style={{ fontSize: 13 }}>npm run dev</code> с другого хоста (например LAN) укажите{" "}
-              <code style={{ fontSize: 13 }}>?user_id=ВАШ_TELEGRAM_ID</code> в URL.
-            </p>
-          </div>
-        </div>
-      </div>
-    );
-  }
-
   const themeAria =
     themeMode === "dark"
       ? "Тёмная тема. Нажмите, чтобы включить светлую"
@@ -232,11 +166,11 @@ export default function App() {
           <div className="topbar-title">
             {activeTab === "plan"
               ? "Сегодня"
-              : activeTab === "diary"
-                ? "Дневник"
-                : activeTab === "pantry"
-                  ? "Кладовая"
-                  : "Список покупок"}
+              : activeTab === "stats"
+                ? "Статистика"
+                : activeTab === "stock"
+                  ? "Запасы"
+                  : "Сегодня"}
           </div>
           <div className="topbar-sub">{todayFormatted}</div>
         </div>
@@ -261,10 +195,17 @@ export default function App() {
       </header>
 
       <main>
-        {activeTab === "pantry" && <PantryTab {...commonProps} />}
-        {activeTab === "plan" && <PlanTab {...commonProps} />}
-        {activeTab === "diary" && <DiaryTab {...commonProps} />}
-        {activeTab === "shopping" && <ShoppingTab {...commonProps} />}
+        {activeTab === "stock" && <StockScreen {...commonProps} />}
+        {activeTab === "plan" && (
+          <PlanTab
+            {...commonProps}
+            planExtendNoticeDismissed={planExtendNoticeDismissed}
+            onPlanExtendNoticeDismiss={() => setPlanExtendNoticeDismissed(true)}
+          />
+        )}
+        {activeTab === "stats" && (
+          <StatsScreen userId={user.telegramId} />
+        )}
       </main>
 
       {showProfile && profile?.exists && (

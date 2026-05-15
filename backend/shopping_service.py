@@ -112,6 +112,11 @@ def estimate_line_cost(amount: float, unit: str, price_per_reference_unit: float
         return 0.0
     if u in ("шт", "штука", "штуки"):
         return round(amt * price_per_reference_unit, 2)
+    if u == "кг":
+        return round(amt * price_per_reference_unit, 2)
+    if u in ("л", "l"):
+        return round(amt * price_per_reference_unit, 2)
+    # г, мл: количество в г/мл, цена за кг или за л
     return round((amt / 1000.0) * price_per_reference_unit, 2)
 
 

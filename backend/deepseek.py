@@ -223,9 +223,7 @@ def build_products_context(products: list) -> str:
     if not products:
         return "Кладовая пуста. Составляй план из любых доступных продуктов — пользователь сходит в магазин."
 
-    regular = []
-    expiring = []
-
+    lines = []
     for p in products:
         item = (
             f"{p['name']} (доступно {p['amount']}{p['unit']}, "
@@ -233,17 +231,18 @@ def build_products_context(products: list) -> str:
             f"белки {p['protein_per_100']}г, жиры {p['fat_per_100']}г, углеводы {p['carbs_per_100']}г"
         )
         if p.get("price_per_unit", 0) > 0:
-            item += f", цена {p['price_per_unit']} руб/ед"
+            u = (p.get("unit") or "г").lower()
+            if u == "шт":
+                price_u = "руб/шт"
+            elif u == "мл":
+                price_u = "руб/л"
+            else:
+                price_u = "руб/кг"
+            item += f", цена {p['price_per_unit']} {price_u}"
         item += ")"
+        lines.append(item)
 
-        if p.get("expiry_date"):
-            expiring.append(item)
-        else:
-            regular.append(item)
-
-    context = "ПРОДУКТЫ В КЛАДОВОЙ (уже дома, не нужно покупать):\n" + "\n".join(regular)
-    if expiring:
-        context += "\n\nПРОДУКТЫ С ИСТЕКАЮЩИМ СРОКОМ (использовать в первую очередь):\n" + "\n".join(expiring)
+    context = "ПРОДУКТЫ В КЛАДОВОЙ (уже дома, не нужно покупать):\n" + "\n".join(lines)
     context += "\n\nВАЖНО: кладовая — лишь то, что УЖЕ ЕСТЬ дома. Это не ограничение выбора блюд. Составляй разнообразный план, используя ЛЮБЫЕ подходящие продукты, которые можно купить в магазине. Продукты из кладовой учитывай при расчёте стоимости (они уже оплачены), но НЕ строй весь план только из них — разнообразие рациона важнее утилизации запасов."
 
     return context

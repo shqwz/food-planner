@@ -1,5 +1,6 @@
 import { useCallback, useEffect, useMemo, useRef, useState } from "react";
 import { apiGet, apiPost, apiPatch } from "../api/client";
+import StockEmptyGlyph from "../components/StockEmptyGlyph";
 
 const UNIT_OPTIONS = ["г", "мл", "шт", "кг"];
 
@@ -50,16 +51,67 @@ function emptyShoppingBody(code) {
     case "all_in_pantry":
       return "План на выбранные дни есть, покупки по нему не нужны — всё уже в кладовой.";
     case "not_built":
-      return "По плану есть что купить, но список ещё не создан. Нажмите «Пересобрать из плана» выше.";
+      return "По плану есть что купить, но список ещё не создан. Нажмите «Собрать список» выше.";
     case "no_ingredients":
       return "Обновите план во вкладке «Сегодня», затем снова пересоберите список.";
     case "no_plan":
     default:
-      return "Сначала план во вкладке «Сегодня», затем «Пересобрать из плана».";
+      return "Сначала план во вкладке «Сегодня», затем «Собрать список».";
   }
 }
 
-export default function ShoppingTab({ showToast, userId }) {
+function pluralDays(n) {
+  const k = Math.abs(Number(n)) % 100;
+  const k1 = k % 10;
+  if (k > 10 && k < 20) return "дней";
+  if (k1 > 1 && k1 < 5) return "дня";
+  if (k1 === 1) return "день";
+  return "дней";
+}
+
+/** Понятные пустые состояния на вкладке «Купить». */
+function emptyShoppingGuide(code, cartDays) {
+  switch (code) {
+    case "all_in_pantry":
+      return {
+        glyph: "check",
+        title: "Всё уже есть дома",
+        hint: "По выбранному сроку докупать нечего — запасы во вкладке «Дома» закрывают план.",
+        primary: null,
+      };
+    case "not_built":
+      return {
+        glyph: "cart",
+        title: "Список ещё не собран",
+        hint: `Нажмите «Собрать список» выше — посчитаем, что купить на ${cartDays} ${pluralDays(cartDays)}.`,
+        primary: null,
+      };
+    case "no_ingredients":
+      return {
+        glyph: "list",
+        title: "В плане нет продуктов",
+        hint: "Обновите план во вкладке «Сегодня» (нужен состав блюд), затем снова соберите список.",
+        primary: null,
+      };
+    case "no_plan":
+    default:
+      return {
+        glyph: "calendar",
+        title: "Сначала нужен план",
+        hint: "Откройте «Сегодня» и составьте план питания — от него строится список покупок.",
+        primary: null,
+      };
+  }
+}
+
+export default function ShoppingTab({
+  showToast,
+  userId,
+  embedded = false,
+  active = true,
+  onTripComplete,
+  onCartChange,
+}) {
   const [mode, setMode] = useState("view"); // view | trip
   const [cartDays, setCartDays] = useState(2);
   const [loading, setLoading] = useState(false);
@@ -84,12 +136,17 @@ export default function ShoppingTab({ showToast, userId }) {
       const data = await apiGet("/api/shopping", { user_id: userId, days: cartDays });
       setCart(data);
       hadCartLoadedRef.current = true;
+      onCartChange?.();
     } catch (e) {
       setError(e.message || "Ошибка");
     } finally {
       if (!silent) setIsCartFetching(false);
     }
-  }, [userId, cartDays]);
+  }, [userId, cartDays, onCartChange]);
+
+  useEffect(() => {
+    if (!active && mode === "trip") setMode("view");
+  }, [active, mode]);
 
   useEffect(() => {
     hadCartLoadedRef.current = false;
@@ -114,6 +171,9 @@ export default function ShoppingTab({ showToast, userId }) {
     const range = fmtRangeHeading(dates);
     return range ? `Список покупок · ${range}` : "Список покупок";
   }, [dates]);
+
+  const itemCount = cart?.items?.length ?? 0;
+  const emptyGuide = cart?.empty ? emptyShoppingGuide(cart?.empty_hint, cartDays) : null;
 
   const run = async (fn) => {
     setLoading(true);
@@ -210,6 +270,8 @@ export default function ShoppingTab({ showToast, userId }) {
       showToast(`Учтено ~${Math.round(res.spent_recorded || 0)} ₽`, "success");
       if (res.skipped_count > 0 && (res.skipped_names || []).length) {
         setReplanModal({ names: res.skipped_names });
+      } else {
+        onTripComplete?.();
       }
     });
 
@@ -219,28 +281,40 @@ export default function ShoppingTab({ showToast, userId }) {
         showToast("Запрос на пересчёт плана принят (пока заглушка)", "info");
       }
       setReplanModal(null);
+      onTripComplete?.();
     });
 
+  const rootClass = [
+    "content",
+    embedded ? "content--stock-pane" : "",
+    mode === "trip" ? "content--shopping-trip" : "",
+  ]
+    .filter(Boolean)
+    .join(" ");
+
   return (
-    <div className={`content${mode === "trip" ? " content--shopping-trip" : ""}`}>
+    <div className={rootClass}>
       {mode === "view" ? (
-        <div className="card" style={{ padding: 16 }}>
-          <div style={{ fontWeight: 800, fontSize: 18, marginBottom: 10 }}>{headline}</div>
-          {dates.length > 0 && !cart?.empty && (
+        <div className={`card${embedded ? " buy-panel" : ""}`} style={embedded ? undefined : { padding: 16 }}>
+          {!embedded && (
+            <div style={{ fontWeight: 800, fontSize: 18, marginBottom: 10 }}>{headline}</div>
+          )}
+          {!embedded && dates.length > 0 && !cart?.empty && (
             <p className="muted" style={{ fontSize: 13, lineHeight: 1.45, margin: "0 0 12px" }}>
               Даты ниже — из плана. Пересборка заменяет весь список.
             </p>
           )}
-          {isCartFetching && (
+          {isCartFetching && embedded && <div className="stock-skeleton stock-skeleton--inline" aria-busy="true" />}
+          {isCartFetching && !embedded && (
             <p className="muted" style={{ fontSize: 14, margin: "0 0 12px" }}>
               Загрузка списка…
             </p>
           )}
-          <div className="cart-window-field">
-            <span className="cart-window-label" id="cart-window-label">
-              Дней из плана
-            </span>
-            <p className="muted cart-window-sublabel">С сегодняшнего дня</p>
+          <div className="buy-panel__days">
+            <div className="buy-panel__label" id="cart-window-label">
+              На сколько дней
+            </div>
+            <p className="buy-panel__hint">Считаем с сегодняшнего дня по вашему плану</p>
             <div className="cart-window-segment" role="radiogroup" aria-labelledby="cart-window-label">
               {[1, 2, 3, 4, 5, 6, 7].map((d) => (
                 <button
@@ -248,6 +322,7 @@ export default function ShoppingTab({ showToast, userId }) {
                   type="button"
                   role="radio"
                   aria-checked={cartDays === d}
+                  aria-label={`${d} ${pluralDays(d)}`}
                   className={`cart-window-day${cartDays === d ? " cart-window-day--active" : ""}`}
                   onClick={() => setCartDays(d)}
                   disabled={loading || isCartFetching}
@@ -258,22 +333,22 @@ export default function ShoppingTab({ showToast, userId }) {
             </div>
           </div>
 
-          {error && (
-            <div style={{ color: "var(--c-danger)", fontSize: 14, marginBottom: 8 }}>{error}</div>
-          )}
+          {error && <div className="buy-panel__error">{error}</div>}
 
           <button
             type="button"
-            className={cart?.empty ? "pill-btn pill-btn-primary" : "pill-btn pill-btn-ghost"}
-            style={{ width: "100%", marginBottom: 0 }}
+            className="pill-btn pill-btn-primary buy-panel__build-btn"
             disabled={loading || isCartFetching}
             onClick={rebuildFromPlan}
           >
-            Пересобрать из плана
+            {loading ? "Считаем…" : "Собрать список"}
           </button>
         </div>
       ) : (
         <>
+          <div className="buy-trip-banner">
+            <strong>В магазине.</strong> Нажимайте «Купил» у того, что положили в корзину. Остальное можно пропустить — после выхода спросим, пересчитать ли план.
+          </div>
           {isCartFetching && (
             <p className="muted" style={{ fontSize: 14, margin: "0 0 12px 16px" }}>
               Загрузка списка…
@@ -286,9 +361,16 @@ export default function ShoppingTab({ showToast, userId }) {
       )}
 
       {cart?.empty && !error && (
-        <>
-          <div className="section-title section-title--date">Покупки</div>
-          <div className="card shopping-empty-list" style={{ padding: 0 }}>
+        <div className={`card stock-empty${embedded ? " buy-empty-guide" : " shopping-empty-list"}`} style={embedded ? undefined : { padding: 0 }}>
+          {embedded && emptyGuide ? (
+            <div className="buy-empty-guide__inner">
+              <StockEmptyGlyph variant={emptyGuide.glyph} />
+              <p className="buy-empty-guide__title">{emptyGuide.title}</p>
+              <p className="buy-empty-guide__hint">{emptyGuide.hint}</p>
+            </div>
+          ) : embedded ? (
+            <p className="stock-empty__title">{emptyShoppingTitle(cart?.empty_hint)}</p>
+          ) : (
             <div className="list-item shopping-empty-list__row">
               <div style={{ flex: 1, minWidth: 0 }}>
                 <div style={{ fontWeight: 700, fontSize: 15, marginBottom: 6 }}>{emptyShoppingTitle(cart?.empty_hint)}</div>
@@ -297,16 +379,38 @@ export default function ShoppingTab({ showToast, userId }) {
                 </p>
               </div>
             </div>
-          </div>
-        </>
+          )}
+        </div>
       )}
 
       {!cart?.empty && dates.length > 0 && (
         <>
+          {mode === "view" && embedded && (
+            <div className="card buy-summary">
+              <div className="buy-summary__row">
+                <span className="buy-summary__label">В списке</span>
+                <span className="buy-summary__value">
+                  {itemCount} {pluralPositions(itemCount)}
+                </span>
+              </div>
+              <div className="buy-summary__row">
+                <span className="buy-summary__label">Примерно</span>
+                <span className="buy-summary__value buy-summary__value--money">{ruMoney(viewTotal)}</span>
+              </div>
+              {budget != null && Number(budget) > 0 && (
+                <div className={`buy-summary__budget${overBudget ? " buy-summary__budget--over" : ""}`}>
+                  Лимит на неделю {Math.round(Number(budget)).toLocaleString("ru-RU")} ₽
+                  {remainder != null && (
+                    <> · остаток {Math.round(remainder).toLocaleString("ru-RU")} ₽</>
+                  )}
+                </div>
+              )}
+            </div>
+          )}
           {dates.map((d) => (
             <div key={d}>
               <div className="section-title section-title--date">
-                На <strong>{fmtDay(d)}</strong>
+                {embedded ? <strong>{fmtDay(d)}</strong> : <>На <strong>{fmtDay(d)}</strong></>}
               </div>
               <div className={`card${mode === "trip" ? " shopping-trip-day-card" : ""}`} style={{ padding: 0 }}>
                 {(mode === "trip"
@@ -331,7 +435,7 @@ export default function ShoppingTab({ showToast, userId }) {
                   disabled={loading}
                   onClick={() => setLineModal({ kind: "add", forDate: d })}
                 >
-                  + Добавить в список
+                  + Своя покупка
                 </button>
               )}
             </div>
@@ -339,9 +443,9 @@ export default function ShoppingTab({ showToast, userId }) {
         </>
       )}
 
-      {cart != null && !cart.empty && (
+      {cart != null && !cart.empty && !(embedded && mode === "view") && (
         <div
-          className={`card${mode === "trip" ? " shopping-trip-total-card" : ""}`}
+          className={`card stock-total${mode === "trip" ? " shopping-trip-total-card" : ""}`}
           style={{
             padding: 16,
             marginTop: 12,
@@ -381,7 +485,7 @@ export default function ShoppingTab({ showToast, userId }) {
           disabled={loading}
           onClick={startShoppingTrip}
         >
-          Режим магазина
+          {embedded ? "Иду в магазин" : "Режим магазина"}
         </button>
       )}
 
@@ -389,10 +493,10 @@ export default function ShoppingTab({ showToast, userId }) {
         <div className="shopping-trip-footer">
           <div className="shopping-trip-footer__btns">
             <button type="button" className="pill-btn pill-btn-primary" disabled={loading} onClick={completeTrip}>
-              Завершить и внести в кладовую
+              {embedded ? "Готово — в «Дома»" : "Завершить и внести в кладовую"}
             </button>
             <button type="button" className="pill-btn pill-btn-ghost" disabled={loading} onClick={() => setMode("view")}>
-              Назад к списку
+              {embedded ? "Назад" : "Назад к списку"}
             </button>
           </div>
         </div>
@@ -478,7 +582,7 @@ function ShoppingRow({ item, mode, onToggleSkip, onEdit }) {
       {mode === "trip" && (
         <div className="shopping-trip-row__actions">
           <button type="button" className="pill-btn shopping-trip-btn-buy" onClick={onToggleSkip}>
-            {skipped ? "Купил" : "Вернуть"}
+            {skipped ? "Купил" : "Отменить"}
           </button>
           <button type="button" className="pill-btn pill-btn-ghost shopping-trip-btn-edit" onClick={onEdit}>
             Изменить

@@ -196,7 +196,7 @@ def generate_plan():
     products = conn.execute(
         """
         SELECT pr.name, pr.unit, pr.calories_per_100, pr.protein_per_100, pr.fat_per_100, pr.carbs_per_100,
-               p.amount, p.price_per_unit, p.expiry_date
+               p.amount, p.price_per_unit
         FROM pantry p
         JOIN products_ref pr ON p.product_id = pr.id
         WHERE p.user_id = ?

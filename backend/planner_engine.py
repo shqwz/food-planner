@@ -1,5 +1,7 @@
 from datetime import datetime, timedelta
 
+from shopping_service import estimate_line_cost
+
 
 def _parse_time_hhmm(value: str, fallback_minutes: int) -> int:
     try:
@@ -120,7 +122,8 @@ def build_planning_context(user: dict, training_days: list, pantry_items: list, 
     for p in pantry_items:
         amount = float(p.get("amount") or 0)
         price = float(p.get("price_per_unit") or 0)
-        pantry_cost_covered += max(0, amount / 1000 * price)
+        unit = p.get("unit") or "г"
+        pantry_cost_covered += max(0, estimate_line_cost(amount, unit, price))
 
     algorithm_context = {
         "daily_targets": daily_targets,

@@ -1,8 +1,24 @@
 import { useCallback, useEffect, useMemo, useState } from "react";
 import { apiDelete, apiGet, apiPost } from "../api/client";
 import { IconCloseSmall, IconSearch } from "../components/ui-icons";
+import StockEmptyGlyph from "../components/StockEmptyGlyph";
 
 const UNIT_OPTIONS = ["г", "мл", "шт", "кг"];
+
+/** Подпись поля цены: в БД хранится ₽/кг, ₽/л или ₽/шт в зависимости от единицы количества. */
+function pantryPriceLabel(unit) {
+  switch (unit) {
+    case "шт":
+      return "Цена за ед. (₽)";
+    case "мл":
+      return "Цена за л (₽)";
+    case "г":
+    case "кг":
+      return "Цена за кг (₽)";
+    default:
+      return "Цена (₽)";
+  }
+}
 
 function AddPantryModal({ userId, onClose, onAdded }) {
   const [name, setName] = useState("");
@@ -10,7 +26,6 @@ function AddPantryModal({ userId, onClose, onAdded }) {
   const [amount, setAmount] = useState("");
   const [unit, setUnit] = useState("г");
   const [price, setPrice] = useState("");
-  const [expiry, setExpiry] = useState("");
   const [saving, setSaving] = useState(false);
   const [searchTimer, setSearchTimer] = useState(null);
 
@@ -33,6 +48,8 @@ function AddPantryModal({ userId, onClose, onAdded }) {
     setSuggestions([]);
   };
 
+  const priceLabel = pantryPriceLabel(unit);
+
   const submit = async () => {
     const a = parseFloat(String(amount).replace(",", "."));
     const p = parseFloat(String(price).replace(",", "."));
@@ -45,7 +62,6 @@ function AddPantryModal({ userId, onClose, onAdded }) {
         amount: a,
         unit,
         price_per_unit: Number.isFinite(p) && p >= 0 ? p : 0,
-        expiry_date: expiry || null,
       });
       onAdded();
       onClose();
@@ -60,7 +76,7 @@ function AddPantryModal({ userId, onClose, onAdded }) {
     <div className="modal-backdrop" role="presentation" onClick={onClose}>
       <div className="modal-dialog" role="dialog" onClick={(e) => e.stopPropagation()}>
         <div className="modal-head">
-          <div className="modal-head-text"><h2 className="modal-title">Добавить в кладовую</h2></div>
+          <div className="modal-head-text"><h2 className="modal-title">Добавить</h2></div>
           <button type="button" className="modal-close" onClick={onClose} aria-label="Закрыть">×</button>
         </div>
         <div className="modal-body">
@@ -104,12 +120,8 @@ function AddPantryModal({ userId, onClose, onAdded }) {
               </div>
             </div>
             <div className="field-group">
-              <label className="field-label" htmlFor="pantry-price">Цена за ед. (₽, необязательно)</label>
-              <input id="pantry-price" className="form-text-input" inputMode="decimal" value={price} onChange={(e) => setPrice(e.target.value)} placeholder="Оставьте пустым" />
-            </div>
-            <div className="field-group">
-              <label className="field-label" htmlFor="pantry-expiry">Срок годности (необязательно)</label>
-              <input id="pantry-expiry" className="form-text-input" type="date" value={expiry} onChange={(e) => setExpiry(e.target.value)} />
+              <label className="field-label" htmlFor="pantry-price">{priceLabel}</label>
+              <input id="pantry-price" className="form-text-input" inputMode="decimal" value={price} onChange={(e) => setPrice(e.target.value)} placeholder="Необязательно" />
             </div>
             <button type="button" className="pill-btn pill-btn-primary modal-stack-submit" onClick={submit} disabled={saving || !name.trim() || !amount}>
               {saving ? "Сохраняем…" : "Добавить"}
@@ -191,14 +203,14 @@ function pantryLowStockBadge(amount, rawUnit) {
   if (comparable < limit) {
     return {
       label: "Мало",
-      title: `Ориентировочно низкий остаток: меньше ${unitHint}. Точный порог подстраивается под единицу товара (не персонально под ваш рацион).`,
+      title: `Ориентировочно низкий остаток: меньше ${unitHint}.`,
     };
   }
 
   return null;
 }
 
-export default function PantryTab({ showToast, userId }) {
+export default function PantryTab({ showToast, userId, embedded = false }) {
   const [query, setQuery] = useState("");
   const [products, setProducts] = useState([]);
   const [loading, setLoading] = useState(true);
@@ -233,7 +245,7 @@ export default function PantryTab({ showToast, userId }) {
     if (userId == null || userId === "" || products.length === 0) return;
     if (
       !window.confirm(
-        "Удалить все позиции из кладовой? Резервы под план для этого аккаунта тоже сбросятся. Действие нельзя отменить.",
+        "Удалить все позиции? Резервы под план тоже сбросятся.",
       )
     ) {
       return;
@@ -242,7 +254,7 @@ export default function PantryTab({ showToast, userId }) {
     try {
       await apiDelete("/api/pantry", { user_id: userId });
       await loadPantry({ soft: true });
-      showToast("Кладовая очищена", "success");
+      showToast("Очищено", "success");
     } catch (e) {
       showToast(e.message || "Ошибка", "error");
     } finally {
@@ -255,66 +267,69 @@ export default function PantryTab({ showToast, userId }) {
     [products, query]
   );
 
-  if (loading) return <div className="content"><div className="card" style={{ padding: 16 }}>Загружаем кладовую...</div></div>;
+  const rootClass = embedded ? "content content--stock-pane" : "content";
+
+  if (loading) {
+    return (
+      <div className={rootClass}>
+        <div className="stock-skeleton card" aria-busy="true" />
+      </div>
+    );
+  }
 
   return (
-    <div className="content">
-      <div className="section-title">Запасы на сегодня</div>
-      <div className="card" style={{ padding: 10, display: "flex", gap: 10, alignItems: "center" }}>
+    <div className={rootClass}>
+      {!embedded && <div className="section-title">Запасы на сегодня</div>}
+
+      <div className="stock-search card">
         <span className="pantry-search-icon" aria-hidden>
           <IconSearch size={18} />
         </span>
         <input
           type="text"
-          placeholder="Поиск продуктов..."
+          className="stock-search__input"
+          placeholder={embedded ? "Поиск" : "Поиск продуктов…"}
           value={query}
           onChange={(e) => setQuery(e.target.value)}
-          style={{ flex: 1, background: "transparent", border: "none", outline: "none", color: "var(--c-text-primary)" }}
+          autoComplete="off"
         />
-        {query && (
-          <button
-            type="button"
-            className="icon-btn icon-btn--svg"
-            onClick={() => setQuery("")}
-            aria-label="Очистить поиск"
-            style={{ width: 32, height: 32, flexShrink: 0 }}
-          >
+        {query ? (
+          <button type="button" className="stock-search__clear" onClick={() => setQuery("")} aria-label="Очистить">
             <IconCloseSmall size={16} />
           </button>
-        )}
+        ) : null}
+        {embedded ? (
+          <button type="button" className="stock-search__add" onClick={() => setAddModal(true)} aria-label="Добавить">
+            +
+          </button>
+        ) : null}
       </div>
 
-      {error && (
-        <div className="card" style={{ padding: 12, color: "var(--c-danger)" }}>
-          {error}
-        </div>
-      )}
+      {error && <div className="card stock-error">{error}</div>}
+
       {products.length === 0 ? (
-        <div className="card" style={{ padding: 16 }}>
-          <div style={{ fontWeight: 700 }}>Кладовая пуста</div>
-          <div className="muted">Добавьте продукты, когда появится возможность.</div>
+        <div className="card stock-empty">
+          <StockEmptyGlyph variant="pantry" />
+          <p className="stock-empty__title">Пока пусто</p>
         </div>
       ) : filtered.length === 0 ? (
-        <div className="card" style={{ padding: 16 }}>
-          <div style={{ fontWeight: 700 }}>Ничего не найдено</div>
-          <div className="muted">Попробуйте изменить запрос.</div>
+        <div className="card stock-empty">
+          <StockEmptyGlyph variant="search" />
+          <p className="stock-empty__title">Нет совпадений</p>
         </div>
       ) : (
-        <div className="card">
+        <div className="card stock-list">
           {filtered.map((p) => {
             const stockBadge = pantryLowStockBadge(p.amount, p.unit);
             return (
-              <div key={p.id} className="list-item">
-                <div style={{ flex: 1, minWidth: 0 }}>
-                  <div style={{ fontWeight: 600, lineHeight: 1.35 }}>
-                    {p.name}
-                    <span style={{ fontWeight: 500, color: "var(--c-text-secondary)" }}>
-                      {" "}
-                      ·{" "}
-                      {Number(p.amount) % 1 === 0 ? Math.round(Number(p.amount)) : p.amount}
-                      &nbsp;{p.unit}
-                    </span>
-                  </div>
+              <div key={p.id} className="list-item stock-list__row">
+                <div className="stock-list__main">
+                  <span className="stock-list__name">{p.name}</span>
+                  <span className="stock-list__qty">
+                    {Number(p.amount) % 1 === 0 ? Math.round(Number(p.amount)) : p.amount}
+                    {" "}
+                    {p.unit}
+                  </span>
                 </div>
                 {stockBadge ? (
                   <span
@@ -330,26 +345,24 @@ export default function PantryTab({ showToast, userId }) {
         </div>
       )}
 
-      <div style={{ display: "flex", flexDirection: "column", gap: 10, marginTop: 14 }}>
+      {!embedded && (
+        <div className="stock-actions">
+          <button type="button" className="pill-btn pill-btn-ghost" onClick={() => setAddModal(true)}>
+            Добавить
+          </button>
+        </div>
+      )}
+
+      {products.length > 0 && (
         <button
           type="button"
-          className="pill-btn pill-btn-ghost"
-          onClick={() => setAddModal(true)}
+          className="stock-clear-link"
+          disabled={clearing}
+          onClick={clearPantry}
         >
-          Добавить продукт
+          Очистить всё
         </button>
-        {products.length > 0 && (
-          <button
-            type="button"
-            className="pill-btn pill-btn-ghost"
-            disabled={clearing || loading}
-            onClick={clearPantry}
-            style={{ color: "var(--c-danger)" }}
-          >
-            Очистить кладовую
-          </button>
-        )}
-      </div>
+      )}
 
       {addModal && (
         <AddPantryModal

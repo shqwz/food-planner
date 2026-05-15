@@ -6,6 +6,7 @@ from shopping import shopping_bp
 from profile import profile_bp
 from telegram_webapp import telegram_webapp_bp
 from services import resolve_user_id, find_or_create_product, NotFoundError
+from product_names import product_match_key
 import os
 import argparse
 
@@ -75,12 +76,11 @@ def get_pantry():
         return jsonify({"error": str(e)}), 404
 
     rows = conn.execute('''
-        SELECT p.id, pr.name, p.amount, pr.unit,
-               p.price_per_unit, p.expiry_date
+        SELECT p.id, pr.name, p.amount, pr.unit, p.price_per_unit
         FROM pantry p
         JOIN products_ref pr ON p.product_id = pr.id
         WHERE p.user_id = ?
-        ORDER BY p.expiry_date IS NULL, p.expiry_date ASC
+        ORDER BY pr.name ASC
     ''', (internal_user_id,)).fetchall()
     conn.close()
 
@@ -92,7 +92,6 @@ def get_pantry():
             "amount": r["amount"],
             "unit": r["unit"],
             "price_per_unit": r["price_per_unit"],
-            "expiry_date": r["expiry_date"],
         })
 
     return jsonify(products)
@@ -128,7 +127,6 @@ def add_to_pantry():
     product_name = data.get("name", "").strip().lower()
     amount = data.get("amount", 0)
     price = data.get("price_per_unit", 0)
-    expiry = data.get("expiry_date", None)
 
     if not user_id or not product_name or amount <= 0:
         return jsonify({"error": "user_id, name, amount обязательны"}), 400
@@ -140,19 +138,52 @@ def add_to_pantry():
         conn.close()
         return jsonify({"error": str(e)}), 404
 
-    product_id = find_or_create_product(conn, data.get("name", ""))
+    unit = (data.get("unit") or "г").strip() or "г"
+    product_id = find_or_create_product(conn, data.get("name", ""), unit=unit)
 
-    # Добавляем на склад
-    conn.execute('''
-        INSERT INTO pantry (user_id, product_id, amount, price_per_unit, expiry_date)
-        VALUES (?, ?, ?, ?, ?)
-    ''', (internal_user_id, product_id, amount, price, expiry))
+    existing = conn.execute(
+        """
+        SELECT id, amount, price_per_unit
+        FROM pantry
+        WHERE user_id = ? AND product_id = ?
+        LIMIT 1
+        """,
+        (internal_user_id, product_id),
+    ).fetchone()
+
+    if existing:
+        old_amt = float(existing["amount"] or 0)
+        add_amt = float(amount)
+        new_amt = old_amt + add_amt
+        old_p = float(existing["price_per_unit"] or 0)
+        new_p = float(price or 0)
+        if new_amt > 0 and new_p > 0 and old_p > 0:
+            merged_p = (old_p * old_amt + new_p * add_amt) / new_amt
+        else:
+            merged_p = new_p if new_p > 0 else old_p
+        conn.execute(
+            """
+            UPDATE pantry
+            SET amount = ?, price_per_unit = ?
+            WHERE id = ? AND user_id = ?
+            """,
+            (new_amt, merged_p, existing["id"], internal_user_id),
+        )
+        pantry_id = existing["id"]
+    else:
+        conn.execute(
+            """
+            INSERT INTO pantry (user_id, product_id, amount, price_per_unit)
+            VALUES (?, ?, ?, ?)
+            """,
+            (internal_user_id, product_id, amount, price),
+        )
+        pantry_id = conn.execute("SELECT last_insert_rowid()").fetchone()[0]
 
     conn.commit()
-    new_id = conn.execute("SELECT last_insert_rowid()").fetchone()[0]
     conn.close()
 
-    return jsonify({"status": "ok", "id": new_id, "product_id": product_id})
+    return jsonify({"status": "ok", "id": pantry_id, "product_id": product_id, "merged": bool(existing)})
 
 
 @app.route("/api/pantry/<int:pantry_id>", methods=["PUT"])
@@ -168,19 +199,20 @@ def update_pantry(pantry_id):
         conn.close()
         return jsonify({"error": str(e)}), 404
 
-    conn.execute('''
+    conn.execute(
+        """
         UPDATE pantry
         SET amount = COALESCE(?, amount),
-            price_per_unit = COALESCE(?, price_per_unit),
-            expiry_date = COALESCE(?, expiry_date)
+            price_per_unit = COALESCE(?, price_per_unit)
         WHERE id = ? AND user_id = ?
-    ''', (
-        data.get("amount"),
-        data.get("price_per_unit"),
-        data.get("expiry_date"),
-        pantry_id,
-        internal_user_id
-    ))
+        """,
+        (
+            data.get("amount"),
+            data.get("price_per_unit"),
+            pantry_id,
+            internal_user_id,
+        ),
+    )
     conn.commit()
     conn.close()
     return jsonify({"status": "ok"})
@@ -214,15 +246,28 @@ def search_products():
         return jsonify([])
 
     conn = get_db()
-    rows = conn.execute('''
+    rows = conn.execute(
+        """
         SELECT id, name, unit, calories_per_100, protein_per_100, fat_per_100, carbs_per_100
         FROM products_ref
         WHERE LOWER(name) LIKE ?
-        LIMIT 10
-    ''', (f"%{query}%",)).fetchall()
+        LIMIT 30
+        """,
+        (f"%{query}%",),
+    ).fetchall()
     conn.close()
 
-    return jsonify([dict(r) for r in rows])
+    seen_keys: set[str] = set()
+    out = []
+    for r in rows:
+        key = product_match_key(r["name"])
+        if key in seen_keys:
+            continue
+        seen_keys.add(key)
+        out.append(dict(r))
+        if len(out) >= 10:
+            break
+    return jsonify(out)
 
 
 # ============================================================

@@ -11,7 +11,6 @@ CATEGORIES = {
     "fruits":         "Фрукты",
     "grains":         "Крупы и хлеб",
     "fats_sauces":    "Масла и соусы",
-    "grocery_trips":  "Закупки по списку",
     "other":          "Прочее",
 }
 

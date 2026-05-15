@@ -21,10 +21,6 @@ const BUDGET_LABEL = {
 
 const WD = ["Пн", "Вт", "Ср", "Чт", "Пт", "Сб", "Вс"];
 
-const CATEGORY_COLORS = [
-  "#4A9EDB","#63C87A","#F5A623","#E05C5C","#9B7FD4","#5BB8C4","#A0A0A0",
-];
-
 const MONTHS = [
   "Январь","Февраль","Март","Апрель","Май","Июнь",
   "Июль","Август","Сентябрь","Октябрь","Ноябрь","Декабрь",
@@ -73,12 +69,6 @@ function calcSleepHours(wakeTime, sleepTime) {
   } catch {
     return null;
   }
-}
-
-function describeArc(cx, cy, r, startAngle, endAngle) {
-  const s = { x: cx + r * Math.cos(startAngle), y: cy + r * Math.sin(startAngle) };
-  const e = { x: cx + r * Math.cos(endAngle),   y: cy + r * Math.sin(endAngle) };
-  return `M ${s.x} ${s.y} A ${r} ${r} 0 ${endAngle - startAngle > Math.PI ? 1 : 0} 1 ${e.x} ${e.y}`;
 }
 
 function pad2(n) { return String(n).padStart(2, "0"); }
@@ -290,53 +280,6 @@ function DrumPicker({ items, value, onChange, width = 72, circular = true }) {
 }
 
 // ─────────────────────────────────────────────────────────────────────────────
-// Донат-диаграмма
-// ─────────────────────────────────────────────────────────────────────────────
-
-function DonutChart({ categories, total }) {
-  const cx = 54, cy = 54, r = 38, sw = 14, gap = 0.04;
-  if (!categories?.length || total === 0) {
-    return (
-      <svg width="108" height="108" viewBox="0 0 108 108" aria-hidden="true">
-        <circle cx={cx} cy={cy} r={r} fill="none"
-          stroke="var(--c-border-mid)" strokeWidth={sw} />
-        <text x={cx} y={cy + 5} textAnchor="middle" fontSize="13"
-          fill="var(--c-text-secondary)" fontFamily="var(--font)">—</text>
-      </svg>
-    );
-  }
-  const segments = [];
-  let cur = -Math.PI / 2;
-  categories.forEach((cat, i) => {
-    const sweep = (cat.amount / total) * 2 * Math.PI - gap;
-    if (sweep <= 0) return;
-    segments.push({
-      path:  describeArc(cx, cy, r, cur, cur + sweep),
-      color: CATEGORY_COLORS[i % CATEGORY_COLORS.length],
-    });
-    cur += (cat.amount / total) * 2 * Math.PI;
-  });
-  return (
-    <svg width="108" height="108" viewBox="0 0 108 108" aria-hidden="true">
-      <circle cx={cx} cy={cy} r={r} fill="none"
-        stroke="var(--c-border-mid)" strokeWidth={sw} />
-      {segments.map((s, i) => (
-        <path key={i} d={s.path} fill="none" stroke={s.color}
-          strokeWidth={sw} strokeLinecap="round" />
-      ))}
-      <text x={cx} y={cy - 5} textAnchor="middle" fontSize="13" fontWeight="500"
-        fill="var(--c-text-primary)" fontFamily="var(--font)">
-        {total.toLocaleString("ru-RU")}
-      </text>
-      <text x={cx} y={cy + 10} textAnchor="middle" fontSize="10"
-        fill="var(--c-text-secondary)" fontFamily="var(--font)">
-        ₽ / нед
-      </text>
-    </svg>
-  );
-}
-
-// ─────────────────────────────────────────────────────────────────────────────
 // Карточка-секция
 // ─────────────────────────────────────────────────────────────────────────────
 
@@ -434,11 +377,6 @@ export default function ProfileScreen({ profile, onClose, userId, onProfileUpdat
 
   const trainingDays = (profile.training_days || []).slice().sort((a, b) => a - b);
   const sleepHours   = calcSleepHours(profile.wake_time, profile.sleep_time);
-  const spendCategories = stats?.spend_by_category || [];
-  const spendTotal      = stats?.spend_total || 0;
-  const budgetWeekly    = Math.round(profile.budget_weekly || 0);
-  const budgetLeft      = budgetWeekly > 0 ? budgetWeekly - spendTotal : null;
-
   // ── Wiggle CSS ────────────────────────────────────────────────────────────
 
   const wiggleStyle1 = editMode && !openCard
@@ -1208,76 +1146,6 @@ export default function ProfileScreen({ profile, onClose, userId, onProfileUpdat
                     Сон: {sleepDiff} ч
                   </div>
                   <SaveBtn id="sleep" />
-                </div>
-              )}
-            </div>
-
-            {/* ══ Питание за неделю ═══════════════════════════════════════ */}
-            <div style={{
-              background: "var(--c-surface)",
-              border: "0.5px solid var(--c-border-mid)",
-              borderRadius: "var(--r-lg)",
-              padding: "14px 16px", marginBottom: 10,
-              opacity: editMode ? 0.35 : 1,
-              transition: "opacity 0.2s",
-              pointerEvents: editMode ? "none" : undefined,
-            }}>
-              <div style={{
-                fontSize: 11, fontWeight: 500, textTransform: "uppercase",
-                letterSpacing: "0.06em", color: "var(--c-text-secondary)", marginBottom: 10,
-              }}>
-                Питание за неделю
-              </div>
-              {statsLoading ? (
-                <div style={{ fontSize: 13, color: "var(--c-text-secondary)" }}>Загрузка…</div>
-              ) : (
-                <div style={{ display: "flex", alignItems: "center", gap: 16 }}>
-                  <DonutChart categories={spendCategories} total={spendTotal} />
-                  <div style={{ flex: 1, display: "flex", flexDirection: "column", gap: 6 }}>
-                    {spendCategories.length === 0 ? (
-                      <div style={{ fontSize: 13, color: "var(--c-text-secondary)" }}>
-                        Расходы появятся после первых покупок
-                      </div>
-                    ) : (
-                      <>
-                        {spendCategories.slice(0, 4).map((cat, i) => (
-                          <div key={cat.key} style={{ display: "flex", alignItems: "center", gap: 7, fontSize: 12 }}>
-                            <span style={{
-                              width: 8, height: 8, borderRadius: "50%", flexShrink: 0,
-                              background: CATEGORY_COLORS[i % CATEGORY_COLORS.length],
-                            }} />
-                            <span style={{ flex: 1 }}>{cat.label}</span>
-                            <span style={{ fontWeight: 500, color: "var(--c-text-secondary)" }}>
-                              {cat.amount.toLocaleString("ru-RU")} ₽
-                            </span>
-                          </div>
-                        ))}
-                        {spendCategories.length > 4 && (
-                          <div style={{ fontSize: 11, color: "var(--c-text-secondary)" }}>
-                            + ещё {spendCategories.length - 4}
-                          </div>
-                        )}
-                      </>
-                    )}
-                    {budgetLeft !== null && (
-                      <div style={{
-                        marginTop: 4, paddingTop: 6,
-                        borderTop: "0.5px solid var(--c-border-mid)",
-                        display: "flex", justifyContent: "space-between",
-                        fontSize: 11, color: "var(--c-text-secondary)",
-                      }}>
-                        <span>Бюджет {budgetWeekly.toLocaleString("ru-RU")} ₽</span>
-                        <span style={{
-                          fontWeight: 500,
-                          color: budgetLeft >= 0 ? "var(--c-accent)" : "var(--c-danger)",
-                        }}>
-                          {budgetLeft >= 0
-                            ? `−${budgetLeft.toLocaleString("ru-RU")} ₽`
-                            : `+${Math.abs(budgetLeft).toLocaleString("ru-RU")} ₽`}
-                        </span>
-                      </div>
-                    )}
-                  </div>
                 </div>
               )}
             </div>

@@ -1,11 +1,9 @@
 """Профиль пользователя: онбординг, настройки, статистика."""
 from __future__ import annotations
 
-import sqlite3
-
 from flask import Blueprint, request, jsonify
 
-from database import get_db, ensure_schema_migrations
+from database import get_db
 from services import resolve_user_id, NotFoundError
 from food_categories import classify_product, CATEGORIES
 
@@ -103,27 +101,20 @@ def get_profile():
         return jsonify({"error": "user_id должен быть числом"}), 400
 
     conn = get_db()
-    try:
-        ensure_schema_migrations(conn)
-        conn.commit()
-
-        row = _user_row_by_telegram(conn, tid)
-        if not row:
-            return jsonify({"exists": False})
-
-        u = dict(row)
-        internal_id = u["id"]
-        training = _collect_training(conn, internal_id)
-        excluded = _collect_prefs(conn, internal_id)
-        done = int(u.get("onboarding_completed") or 0) == 1
-
-        if not done:
-            return jsonify(_row_to_profile_dict(row, False, training, excluded))
-        return jsonify(_row_to_profile_dict(row, True, training, excluded))
-    except Exception as e:
-        return jsonify({"error": str(e)}), 500
-    finally:
+    row = _user_row_by_telegram(conn, tid)
+    if not row:
         conn.close()
+        return jsonify({"exists": False})
+
+    internal_id = row["id"]
+    training = _collect_training(conn, internal_id)
+    excluded = _collect_prefs(conn, internal_id)
+    done = int(row["onboarding_completed"] or 0) == 1
+    conn.close()
+
+    if not done:
+        return jsonify(_row_to_profile_dict(row, False, training, excluded))
+    return jsonify(_row_to_profile_dict(row, True, training, excluded))
 
 
 # ── PUT /api/profile ──────────────────────────────────────────────────────────
@@ -197,99 +188,88 @@ def put_profile():
     excluded = [str(x).strip() for x in excluded if str(x).strip()]
 
     conn = get_db()
-    try:
-        ensure_schema_migrations(conn)
-        conn.commit()
+    row = _user_row_by_telegram(conn, tid)
 
-        row = _user_row_by_telegram(conn, tid)
-
-        if row:
-            internal_id = row["id"]
-            conn.execute(
-                """
-                UPDATE users SET
-                    name          = COALESCE(?, name),
-                    age           = COALESCE(?, age),
-                    weight        = COALESCE(?, weight),
-                    height        = COALESCE(?, height),
-                    goal          = ?,
-                    goal_custom   = ?,
-                    budget_weekly = ?,
-                    budget_tier   = ?,
-                    budget_custom = ?,
-                    kitchen_type   = COALESCE(?, kitchen_type),
-                    wake_time      = ?,
-                    sleep_time     = ?,
-                    sex            = ?,
-                    activity_level = ?,
-                    onboarding_completed = 1
-                WHERE id = ?
-                """,
-                (
-                    name, age, weight, height,
-                    goal, goal_custom,
-                    bw, budget_tier, budget_custom,
-                    kitchen,
-                    wake, sleep,
-                    sex, activity,
-                    internal_id,
-                ),
-            )
-        else:
-            cur = conn.execute(
-                """
-                INSERT INTO users (
-                    telegram_id, name, age, weight, height,
-                    goal, goal_custom,
-                    budget_weekly, budget_tier, budget_custom,
-                    kitchen_type, wake_time, sleep_time,
-                    sex, activity_level,
-                    onboarding_completed
-                ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, 1)
-                """,
-                (
-                    tid,
-                    name or "Пользователь",
-                    age or 25,
-                    weight or 75,
-                    height or 175,
-                    goal, goal_custom,
-                    bw, budget_tier, budget_custom,
-                    kitchen,
-                    wake, sleep,
-                    sex, activity,
-                ),
-            )
-            internal_id = cur.lastrowid
-
-        conn.execute("DELETE FROM training_days WHERE user_id = ?", (internal_id,))
-        for dow in training_days:
-            conn.execute(
-                "INSERT INTO training_days (user_id, day_of_week) VALUES (?, ?)",
-                (internal_id, dow),
-            )
-
+    if row:
+        internal_id = row["id"]
         conn.execute(
-            "DELETE FROM food_preferences WHERE user_id = ? AND preference_type = 'exclude'",
-            (internal_id,),
+            """
+            UPDATE users SET
+                name          = COALESCE(?, name),
+                age           = COALESCE(?, age),
+                weight        = COALESCE(?, weight),
+                height        = COALESCE(?, height),
+                goal          = ?,
+                goal_custom   = ?,
+                budget_weekly = ?,
+                budget_tier   = ?,
+                budget_custom = ?,
+                kitchen_type   = COALESCE(?, kitchen_type),
+                wake_time      = ?,
+                sleep_time     = ?,
+                sex            = ?,
+                activity_level = ?,
+                onboarding_completed = 1
+            WHERE id = ?
+            """,
+            (
+                name, age, weight, height,
+                goal, goal_custom,
+                bw, budget_tier, budget_custom,
+                kitchen,
+                wake, sleep,
+                sex, activity,
+                internal_id,
+            ),
         )
-        for pname in excluded:
-            conn.execute(
-                """INSERT INTO food_preferences (user_id, product_name, preference_type)
-                   VALUES (?, ?, 'exclude')""",
-                (internal_id, pname),
-            )
+    else:
+        cur = conn.execute(
+            """
+            INSERT INTO users (
+                telegram_id, name, age, weight, height,
+                goal, goal_custom,
+                budget_weekly, budget_tier, budget_custom,
+                kitchen_type, wake_time, sleep_time,
+                sex, activity_level,
+                onboarding_completed
+            ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, 1)
+            """,
+            (
+                tid,
+                name or "Пользователь",
+                age or 25,
+                weight or 75,
+                height or 175,
+                goal, goal_custom,
+                bw, budget_tier, budget_custom,
+                kitchen,
+                wake, sleep,
+                sex, activity,
+            ),
+        )
+        internal_id = cur.lastrowid
 
-        conn.commit()
-        return jsonify({"status": "ok"})
-    except sqlite3.OperationalError as e:
-        conn.rollback()
-        return jsonify({"error": str(e)}), 500
-    except Exception as e:
-        conn.rollback()
-        return jsonify({"error": str(e)}), 500
-    finally:
-        conn.close()
+    conn.execute("DELETE FROM training_days WHERE user_id = ?", (internal_id,))
+    for dow in training_days:
+        conn.execute(
+            "INSERT INTO training_days (user_id, day_of_week) VALUES (?, ?)",
+            (internal_id, dow),
+        )
+
+    conn.execute(
+        "DELETE FROM food_preferences WHERE user_id = ? AND preference_type = 'exclude'",
+        (internal_id,),
+    )
+    for pname in excluded:
+        conn.execute(
+            """INSERT INTO food_preferences (user_id, product_name, preference_type)
+               VALUES (?, ?, 'exclude')""",
+            (internal_id, pname),
+        )
+
+    conn.commit()
+    conn.close()
+    return jsonify({"status": "ok"})
 
 
 # ── GET /api/profile/stats ────────────────────────────────────────────────────
@@ -297,12 +277,8 @@ def put_profile():
 @profile_bp.route("/api/profile/stats", methods=["GET"])
 def get_profile_stats():
     """
-    Статистика профиля за последние 7 дней:
-    - средние КБЖУ (из consumed_meals)
-    - расходы по категориям: строки shopping_list с is_purchased=1 (устар.);
-      завершённые поездки учитываются из shopping_spend_log (По списку покупок).
-
-    Категории определяются статическим словарём (food_categories.py), без AI.
+    Статистика за указанный месяц (year + month) или за последние 7 дней.
+    Параметры: user_id, year (опц.), month (опц., 1-12)
     """
     user_id = request.args.get("user_id")
     if not user_id:
@@ -312,21 +288,50 @@ def get_profile_stats():
     except (TypeError, ValueError):
         return jsonify({"error": "user_id должен быть числом"}), 400
 
+    # Определяем диапазон дат
+    from datetime import date as _date, timedelta as _td
+    import calendar as _cal
+    year_str  = request.args.get("year")
+    month_str = request.args.get("month")
+    if year_str and month_str:
+        try:
+            y, m = int(year_str), int(month_str)
+            date_from = f"{y:04d}-{m:02d}-01"
+            last_day  = _cal.monthrange(y, m)[1]
+            date_to   = f"{y:04d}-{m:02d}-{last_day:02d}"
+            mode = "month"
+        except Exception:
+            mode = "week"
+            date_from = str(_date.today() - _td(days=6))
+            date_to   = str(_date.today())
+    else:
+        mode = "week"
+        date_from = str(_date.today() - _td(days=6))
+        date_to   = str(_date.today())
+
     conn = get_db()
     row = _user_row_by_telegram(conn, tid)
     if not row:
         conn.close()
         return jsonify({"error": "Пользователь не найден"}), 404
 
-    stats = _calc_stats(conn, row["id"])
+    stats = _calc_stats(conn, row["id"], date_from=date_from, date_to=date_to)
+    stats["mode"] = mode
     conn.close()
     return jsonify(stats)
 
 
-def _calc_stats(conn, internal_id: int) -> dict:
-    """Вычисляет статистику без AI — только SQL + словарь категорий."""
+def _calc_stats(conn, internal_id: int, date_from: str = None, date_to: str = None) -> dict:
+    """Вычисляет статистику без AI — только SQL + словарь категорий.
+    date_from / date_to — ISO строки YYYY-MM-DD. Если не заданы — последние 7 дней.
+    """
+    from datetime import date as _date, timedelta as _td
+    if not date_from:
+        date_from = str(_date.today() - _td(days=6))
+    if not date_to:
+        date_to = str(_date.today())
 
-    # 1. Средние КБЖУ за последние 7 дней из дневника
+    # 1. Средние КБЖУ из дневника за диапазон
     rows_kcal = conn.execute(
         """
         SELECT
@@ -337,11 +342,11 @@ def _calc_stats(conn, internal_id: int) -> dict:
             SUM(total_carbs)   AS day_carbs
         FROM consumed_meals
         WHERE user_id = ?
-          AND plan_date >= date('now', '-7 days')
+          AND plan_date BETWEEN ? AND ?
         GROUP BY plan_date
         ORDER BY plan_date DESC
         """,
-        (internal_id,),
+        (internal_id, date_from, date_to),
     ).fetchall()
 
     days_count = len(rows_kcal)
@@ -361,39 +366,62 @@ def _calc_stats(conn, internal_id: int) -> dict:
         WHERE user_id = ?
           AND is_purchased = 1
           AND estimated_cost > 0
-          AND created_at >= date('now', '-7 days')
+          AND DATE(COALESCE(created_at,'1970-01-01')) BETWEEN ? AND ?
         """,
-        (internal_id,),
+        (internal_id, date_from, date_to),
     ).fetchall()
 
-    # 2b. Завершённые закупки: POST /api/shopping/complete пишет сюда и удаляет shopping_list
+    # 2b. Завершённые закупки: по каждой купленной позиции (POST /api/shopping/complete)
+    rows_trip_lines = conn.execute(
+        """
+        SELECT product_name, amount_rub AS cost
+        FROM shopping_spend_lines
+        WHERE user_id = ?
+          AND amount_rub > 0
+          AND date(COALESCE(created_at, '1970-01-01')) BETWEEN ? AND ?
+        """,
+        (internal_id, date_from, date_to),
+    ).fetchall()
+
+    # 2c. Старые закупки только суммой в shopping_spend_log (до построчного учёта)
     row_log = conn.execute(
         """
         SELECT SUM(amount) AS trip_total
         FROM shopping_spend_log
         WHERE user_id = ?
           AND COALESCE(amount, 0) > 0
-          AND date(COALESCE(created_at, '1970-01-01')) >= date('now', '-7 days')
+          AND date(COALESCE(created_at, '1970-01-01')) BETWEEN ? AND ?
         """,
-        (internal_id,),
+        (internal_id, date_from, date_to),
     ).fetchone()
 
     category_totals: dict[str, float] = {k: 0.0 for k in CATEGORIES}
     total_spend = 0.0
 
-    for row in rows_spend:
-        name = row["product_name"] or ""
-        cost = float(row["cost"] or 0)
-        cat = classify_product(name)
+    def _add_spend(name: str, cost: float) -> None:
+        nonlocal total_spend
+        if cost <= 0:
+            return
+        cat = classify_product(name or "")
         if cat not in category_totals:
             cat = "other"
-        category_totals[cat] = category_totals.get(cat, 0.0) + cost
+        category_totals[cat] += cost
         total_spend += cost
 
+    for row in rows_spend:
+        _add_spend(row["product_name"] or "", float(row["cost"] or 0))
+
+    lines_sum = 0.0
+    for row in rows_trip_lines:
+        cost = float(row["cost"] or 0)
+        lines_sum += cost
+        _add_spend(row["product_name"] or "", cost)
+
     trip_total = float(row_log["trip_total"] or 0) if row_log else 0.0
-    if trip_total > 0:
-        category_totals["grocery_trips"] += trip_total
-        total_spend += trip_total
+    orphan = max(0.0, trip_total - lines_sum)
+    if orphan > 0.01:
+        category_totals["other"] += orphan
+        total_spend += orphan
 
     # Только непустые категории, отсортированные по убыванию суммы
     spend_by_category = sorted(
@@ -406,6 +434,26 @@ def _calc_stats(conn, internal_id: int) -> dict:
         reverse=True,
     )
 
+    # 3. Топ блюд по частоте за период
+    top_rows = conn.execute(
+        """
+        SELECT dish_name, COUNT(*) AS cnt,
+               AVG(total_kcal) AS avg_kcal
+        FROM consumed_meals
+        WHERE user_id = ?
+          AND plan_date BETWEEN ? AND ?
+          AND dish_name IS NOT NULL AND dish_name != ''
+        GROUP BY LOWER(TRIM(dish_name))
+        ORDER BY cnt DESC
+        LIMIT 10
+        """,
+        (internal_id, date_from, date_to),
+    ).fetchall()
+    top_dishes = [
+        {"name": r["dish_name"], "count": r["cnt"], "avg_kcal": round(r["avg_kcal"] or 0)}
+        for r in top_rows
+    ]
+
     return {
         "avg_kcal":           avg_kcal,
         "avg_protein":        avg_protein,
@@ -414,4 +462,7 @@ def _calc_stats(conn, internal_id: int) -> dict:
         "days_tracked":       days_count,
         "spend_total":        round(total_spend),
         "spend_by_category":  spend_by_category,
+        "top_dishes":         top_dishes,
+        "date_from":          date_from,
+        "date_to":            date_to,
     }
