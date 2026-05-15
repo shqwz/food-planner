@@ -79,7 +79,7 @@ function todayIsoLocal() {
   return `${t.getFullYear()}-${pad2(t.getMonth() + 1)}-${pad2(t.getDate())}`;
 }
 
-/** Полных лет на сегодня по дате рождения YYYY-MM-DD */
+/** Возраст в полных годах на сегодня по дате рождения YYYY-MM-DD (для сохранения в API). */
 function ageFromBirthIso(iso) {
   const s = (iso || "").trim();
   if (!/^\d{4}-\d{2}-\d{2}$/.test(s)) return null;
@@ -483,7 +483,7 @@ export default function ProfileScreen({ profile, onClose, userId, onProfileUpdat
                 <div>
                   <div style={{ fontWeight: 500, fontSize: 17 }}>{profile.name || "Без имени"}</div>
                   <div style={{ fontSize: 13, color: "var(--c-text-secondary)" }}>
-                    {profile.age ?? "—"} лет · {profile.weight ?? "—"} кг · {profile.height ?? "—"} см
+                    {profile.weight ?? "—"} кг · {profile.height ?? "—"} см
                   </div>
                 </div>
               </div>
@@ -573,15 +573,6 @@ export default function ProfileScreen({ profile, onClose, userId, onProfileUpdat
                       fontFamily: "var(--font)",
                     }}
                   />
-                  <div style={{
-                    fontSize: 12, color: "var(--c-text-secondary)",
-                    marginTop: 8,
-                  }}>
-                    {(() => {
-                      const a = ageFromBirthIso(editBirthDate);
-                      return a != null ? `Полных лет: ${a}` : "Укажи дату";
-                    })()}
-                  </div>
 
                   {/* Пол */}
                   <SubLabel>Пол</SubLabel>
