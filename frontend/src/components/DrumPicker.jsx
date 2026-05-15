@@ -1,4 +1,5 @@
 import { useEffect, useRef, useState } from "react";
+import { disableTelegramVerticalSwipes } from "../lib/telegram";
 
 export const DRUM_ITEM_H = 40;
 
@@ -89,6 +90,7 @@ export default function DrumPicker({ items, value, onChange, width = 72, circula
 
   function onPointerDown(e) {
     e.preventDefault();
+    disableTelegramVerticalSwipes();
     e.currentTarget.setPointerCapture(e.pointerId);
     draggingRef.current = true;
     dragRef.current = {
@@ -102,6 +104,7 @@ export default function DrumPicker({ items, value, onChange, width = 72, circula
 
   function onPointerMove(e) {
     if (!dragRef.current || !innerRef.current) return;
+    e.preventDefault();
     const dy = e.clientY - dragRef.current.initialClientY;
     let newY = dragRef.current.initialTranslateY + dy;
     const el = innerRef.current;

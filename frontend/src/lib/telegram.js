@@ -10,11 +10,27 @@ export function isTelegramMiniAppShell() {
   return Boolean(tg && (tg.platform || tg.version));
 }
 
+/** Отключает свайп вниз по контенту — иначе закрывается Mini App (Telegram Bot API 7.7+). */
+export function disableTelegramVerticalSwipes() {
+  const tg = getTelegramWebApp();
+  if (tg && typeof tg.disableVerticalSwipes === "function") {
+    tg.disableVerticalSwipes();
+  }
+}
+
+export function enableTelegramVerticalSwipes() {
+  const tg = getTelegramWebApp();
+  if (tg && typeof tg.enableVerticalSwipes === "function") {
+    tg.enableVerticalSwipes();
+  }
+}
+
 export function initTelegramWebApp() {
   const tg = getTelegramWebApp();
   if (!tg) return null;
   tg.ready();
   tg.expand();
+  disableTelegramVerticalSwipes();
   try {
     const vk = navigator.virtualKeyboard;
     if (vk && "overlaysContent" in vk) vk.overlaysContent = true;

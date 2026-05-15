@@ -1788,6 +1788,7 @@ html[data-theme="dark"] .plan-meal-card--breakfast .plan-meal-card__kcal {
   border-radius: var(--r-md);
   background: var(--c-surface2);
   touch-action: none;
+  overscroll-behavior: contain;
   user-select: none;
   cursor: grab;
   flex-shrink: 0;
