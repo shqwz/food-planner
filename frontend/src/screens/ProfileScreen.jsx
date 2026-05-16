@@ -103,177 +103,171 @@ function ageFromBirthIso(iso) {
 }
 
 // ─────────────────────────────────────────────────────────────────────────────
-// Барабанный пикер (drum scroll)
+// Барабанный пикер — бесконечная прокрутка как на iPhone
 // ─────────────────────────────────────────────────────────────────────────────
 
-function wrapIndex(i, n) {
-  if (!n) return 0;
-  return ((Math.round(i) % n) + n) % n;
-}
+const COPIES = 40; // количество копий списка — никогда не кончается
 
-/**
- * Барабан выбора: один логический круг items.
- *
- * При circular список в DOM состоит из ДВУХ одинаковых сегментов подряд (2×n строк).
- * Скролл «петли» поддерживается сдвигом translate без анимации, когда центр доходит до
- * краев этой двойной ленты — визуально непрерывно, данных в коде один items.
- */
-function DrumPicker({ items, value, onChange, width = 72, circular = true }) {
-  const innerRef = useRef(null);
-  const dragRef  = useRef(null);
+function DrumPicker({ items, value, onChange, width = 72 }) {
+  const n = items.length;
   const containerRef = useRef(null);
+  const innerRef     = useRef(null);
+  const stateRef     = useRef({ startY: 0, startOffset: 0, velocity: 0, lastY: 0, lastT: 0, raf: null });
 
-  // Вешаем нативные touch-слушатели с passive:false чтобы блокировать скролл страницы на iOS
+  // offset = количество пикселей сдвига вниз от нуля
+  // item[0] находится сверху при offset=0
+  // центр окна = 2*ITEM_H от верха контейнера (строка №2, считая с 0)
+  // нужный offset чтобы item[i] был в центре: offset = (COPIES/2 * n + i) * ITEM_H - 2*ITEM_H
+
+  const totalRows  = COPIES * n;
+  const midOffset  = (row) => row * ITEM_H - 2 * ITEM_H;
+  const rowForIdx  = (i)   => Math.floor(COPIES / 2) * n + ((i % n + n) % n);
+
+  const clampOffset = (off) => {
+    // держим в пределах первой и последней трети буфера
+    const lo = Math.floor(COPIES * 0.2) * n * ITEM_H - 2 * ITEM_H;
+    const hi = Math.floor(COPIES * 0.8) * n * ITEM_H - 2 * ITEM_H;
+    if (off < lo) return off + Math.round((hi - off) / (n * ITEM_H)) * n * ITEM_H;
+    if (off > hi) return off - Math.round((off - lo) / (n * ITEM_H)) * n * ITEM_H;
+    return off;
+  };
+
+  const setOffset = (off, animate) => {
+    const el = innerRef.current;
+    if (!el) return;
+    const safe = clampOffset(off);
+    el.style.transition = animate ? "transform 0.22s cubic-bezier(0.25,0.46,0.45,0.94)" : "none";
+    el.style.transform = `translateY(${-safe}px)`;
+    return safe;
+  };
+
+  const offsetForCenter = () => {
+    const el = innerRef.current;
+    if (!el) return 0;
+    const m = el.style.transform.match(/translateY\(([-\d.]+)px\)/);
+    return m ? -parseFloat(m[1]) : 0;
+  };
+
+  const snapAndNotify = (off) => {
+    const row   = Math.round((off + 2 * ITEM_H) / ITEM_H);
+    const idx   = ((row % n) + n) % n;
+    const snapped = midOffset(row);
+    setOffset(snapped, true);
+    onChange(items[idx]);
+  };
+
+  // Инициализация позиции
+  useEffect(() => {
+    const i = items.indexOf(value);
+    const idx = i === -1 ? 0 : i;
+    setOffset(midOffset(rowForIdx(idx)), false);
+  // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, []);
+
+  // Нативные touch с passive:false
   useEffect(() => {
     const el = containerRef.current;
     if (!el) return;
-    const onTouchStartNative = (e) => { e.preventDefault(); onPointerDown(e); };
-    const onTouchMoveNative  = (e) => { e.preventDefault(); onPointerMove(e); };
-    const onTouchEndNative   = (e) => { onPointerUp(e); };
-    el.addEventListener("touchstart", onTouchStartNative, { passive: false });
-    el.addEventListener("touchmove",  onTouchMoveNative,  { passive: false });
-    el.addEventListener("touchend",   onTouchEndNative,   { passive: false });
+
+    const onStart = (e) => {
+      e.preventDefault();
+      const y = e.touches[0].clientY;
+      const s = stateRef.current;
+      cancelAnimationFrame(s.raf);
+      s.startY = y; s.startOffset = offsetForCenter();
+      s.lastY = y; s.lastT = Date.now(); s.velocity = 0;
+    };
+
+    const onMove = (e) => {
+      e.preventDefault();
+      const y   = e.touches[0].clientY;
+      const s   = stateRef.current;
+      const now = Date.now();
+      const dt  = now - s.lastT || 1;
+      s.velocity = (s.lastY - y) / dt;
+      s.lastY = y; s.lastT = now;
+      const off = s.startOffset + (s.startY - y);
+      setOffset(off, false);
+      // live preview
+      const row = Math.round((off + 2 * ITEM_H) / ITEM_H);
+      onChange(items[((row % n) + n) % n]);
+    };
+
+    const onEnd = (e) => {
+      const s = stateRef.current;
+      // инерция
+      let off = offsetForCenter();
+      const v = s.velocity * 120; // pixels to coast
+      off += v;
+      snapAndNotify(off);
+    };
+
+    el.addEventListener("touchstart", onStart, { passive: false });
+    el.addEventListener("touchmove",  onMove,  { passive: false });
+    el.addEventListener("touchend",   onEnd,   { passive: false });
     return () => {
-      el.removeEventListener("touchstart", onTouchStartNative);
-      el.removeEventListener("touchmove",  onTouchMoveNative);
-      el.removeEventListener("touchend",   onTouchEndNative);
+      el.removeEventListener("touchstart", onStart);
+      el.removeEventListener("touchmove",  onMove);
+      el.removeEventListener("touchend",   onEnd);
     };
   // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [items, value]);
+  }, [items, n]);
 
-  const idx = items.indexOf(value);
-  const selIdx = idx === -1 ? 0 : idx;
-  const n = items.length;
+  // Мышь для десктопа
+  const onMouseDown = (e) => {
+    const s = stateRef.current;
+    s.startY = e.clientY; s.startOffset = offsetForCenter(); s.velocity = 0; s.lastY = e.clientY; s.lastT = Date.now();
+    const onMM = (ev) => {
+      const now = Date.now(); const dt = now - s.lastT || 1;
+      s.velocity = (s.lastY - ev.clientY) / dt; s.lastY = ev.clientY; s.lastT = now;
+      const off = s.startOffset + (s.startY - ev.clientY);
+      setOffset(off, false);
+      onChange(items[((Math.round((off + 2*ITEM_H)/ITEM_H) % n) + n) % n]);
+    };
+    const onMU = (ev) => {
+      window.removeEventListener("mousemove", onMM);
+      window.removeEventListener("mouseup", onMU);
+      const off = offsetForCenter() + s.velocity * 120;
+      snapAndNotify(off);
+    };
+    window.addEventListener("mousemove", onMM);
+    window.addEventListener("mouseup", onMU);
+  };
 
-  const totalRows = circular && n > 0 ? n * 2 : n;
-
-  // translateY: центр окна совпадает с inner-строкой virtualRow
-  const yForVirtual = (virtualRow) => (2 - virtualRow) * ITEM_H;
-
-  /** Центральная строка для canonical: нижний круг (первая копия 0…n‑1 сверху, вторая n…2n‑1 под ней). */
-  const stableVirtualRow = (canonicalIdx) => n + canonicalIdx;
-
-  /** Держим центр между n и 2n−1 «строкой»: прыжок на ±n высот одинакового паттерна без анимации. */
-  function recenterCircularTranslate(rawY, el, keepTransitionFalse = true) {
-    if (!circular || n <= 0 || !el) return rawY;
-    let newY = rawY;
-    let vr = Math.round(2 - newY / ITEM_H);
-    while (vr < n) {
-      newY += n * ITEM_H;
-      vr = Math.round(2 - newY / ITEM_H);
-    }
-    while (vr >= 2 * n) {
-      newY -= n * ITEM_H;
-      vr = Math.round(2 - newY / ITEM_H);
-    }
-    if (keepTransitionFalse) el.style.transition = "none";
-    el.style.transform = `translateY(${newY}px)`;
-    return newY;
-  }
-
-  useEffect(() => {
-    const el = innerRef.current;
-    if (!el) return;
-    el.style.transition = "none";
-    if (circular && n > 0) {
-      el.style.transform = `translateY(${yForVirtual(stableVirtualRow(selIdx))}px)`;
-    } else {
-      el.style.transform = `translateY(${yForVirtual(selIdx)}px)`;
-    }
-  }, []); // только при маунте
-
-  function snapToNearest(rawY) {
-    const live = 2 - rawY / ITEM_H;
-    const picked = circular && n > 0 ? wrapIndex(live, n) : Math.max(0, Math.min(n - 1, Math.round(live)));
-    const el = innerRef.current;
-    if (!el) return;
-    el.style.transition = "transform 0.18s ease";
-    const targetY =
-      circular && n > 0 ? yForVirtual(stableVirtualRow(picked)) : yForVirtual(picked);
-    el.style.transform = `translateY(${targetY}px)`;
-    onChange(items[picked]);
-  }
-
-  function currentY() {
-    const el = innerRef.current;
-    const t = el?.style.transform;
-    const m = t?.match(/translateY\(([-\d.]+)px\)/);
-    if (m) return parseFloat(m[1]);
-    if (!el) return 0;
-    return circular && n > 0
-      ? yForVirtual(stableVirtualRow(selIdx))
-      : yForVirtual(selIdx);
-  }
-
-  function onPointerDown(e) {
-    e.preventDefault();
-    const startY = e.touches ? e.touches[0].clientY : e.clientY;
-    const startTranslate = currentY();
-    dragRef.current = { initialClientY: startY, initialTranslateY: startTranslate };
-    const el = innerRef.current;
-    if (el) el.style.transition = "none";
-  }
-
-  function onPointerMove(e) {
-    if (!dragRef.current || !innerRef.current) return;
-    const clientY = e.touches ? e.touches[0].clientY : e.clientY;
-    const dy = clientY - dragRef.current.initialClientY;
-    let newY = dragRef.current.initialTranslateY + dy;
-    const el = innerRef.current;
-    if (circular && n > 0) {
-      newY = recenterCircularTranslate(newY, el);
-    }
-    el.style.transition = "none";
-    el.style.transform = `translateY(${newY}px)`;
-    const live = 2 - newY / ITEM_H;
-    const liveIdx =
-      circular && n > 0
-        ? wrapIndex(live, n)
-        : Math.max(0, Math.min(n - 1, Math.round(live)));
-    onChange(items[liveIdx]);
-  }
-
-  function onPointerUp(e) {
-    if (!dragRef.current) return;
-    snapToNearest(currentY());
-    dragRef.current = null;
-  }
+  const currentIdx = items.indexOf(value);
 
   return (
     <div
       ref={containerRef}
-      style={{
-        width, height: ITEM_H * 5, overflow: "hidden", position: "relative",
-        borderRadius: "var(--r-md)",
-        background: "var(--c-surface2)",
-        touchAction: "none", userSelect: "none", cursor: "grab",
-      }}
-      onMouseDown={onPointerDown}
-      onMouseMove={onPointerMove}
-      onMouseUp={onPointerUp}
-      onMouseLeave={onPointerUp}
+      style={{ width, height: ITEM_H * 5, overflow: "hidden", position: "relative",
+        borderRadius: "var(--r-md)", background: "var(--c-surface2)",
+        touchAction: "none", userSelect: "none", cursor: "grab" }}
+      onMouseDown={onMouseDown}
     >
-      {/* Контент барабана (при circular — несколько копий списка подряд) */}
-      <div ref={innerRef} style={{ display: "flex", flexDirection: "column" }}>
+      {/* Линии выделения */}
+      <div style={{ position: "absolute", top: ITEM_H * 2, left: 0, right: 0, height: ITEM_H,
+        borderTop: "0.5px solid var(--c-border)", borderBottom: "0.5px solid var(--c-border)",
+        pointerEvents: "none", zIndex: 1 }} />
+      {/* Фейд сверху и снизу */}
+      <div style={{ position: "absolute", top: 0, left: 0, right: 0, height: ITEM_H * 2,
+        background: "linear-gradient(to bottom, var(--c-surface2), transparent)",
+        pointerEvents: "none", zIndex: 1 }} />
+      <div style={{ position: "absolute", bottom: 0, left: 0, right: 0, height: ITEM_H * 2,
+        background: "linear-gradient(to top, var(--c-surface2), transparent)",
+        pointerEvents: "none", zIndex: 1 }} />
+
+      <div ref={innerRef} style={{ display: "flex", flexDirection: "column", willChange: "transform" }}>
         {Array.from({ length: totalRows }, (_, r) => {
-          const canonicalIdx = n > 0 ? ((r % n) + n) % n : 0;
-          const item = items[canonicalIdx];
-          const highlighted = circular ? item === value : r === selIdx && item === value;
+          const ci = ((r % n) + n) % n;
+          const item = items[ci];
+          const highlighted = ci === currentIdx;
           return (
-            <div
-              key={`r-${r}`}
-              style={{
-                height: ITEM_H,
-                display: "flex", alignItems: "center", justifyContent: "center",
-                fontSize: highlighted ? 20 : 15,
-                fontWeight: highlighted ? 500 : 400,
-                color: highlighted
-                  ? "var(--c-text-primary)"
-                  : "var(--c-text-secondary)",
-                transition: "font-size 0.1s, color 0.1s",
-                flexShrink: 0,
-              }}
-            >
+            <div key={r} style={{ height: ITEM_H, display: "flex", alignItems: "center",
+              justifyContent: "center", flexShrink: 0,
+              fontSize: highlighted ? 20 : 15,
+              fontWeight: highlighted ? 600 : 400,
+              color: highlighted ? "var(--c-text-primary)" : "var(--c-text-secondary)",
+            }}>
               {item}
             </div>
           );

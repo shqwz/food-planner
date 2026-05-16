@@ -1,5 +1,6 @@
 import { useCallback, useEffect, useMemo, useState } from "react";
 import { apiGet, apiPost } from "../api/client";
+import { toastApiError } from "../lib/apiErrors";
 import PlanMenuModal from "./PlanMenuModal";
 
 // ─── константы ────────────────────────────────────────────────────────────────
@@ -253,11 +254,16 @@ export default function PlanTab({ showToast, userId }) {
   const runGenerate = async (payload) => {
     setGenerateBusy(true);
     try {
-      await apiPost("/api/plan/generate", {
-        user_id: userId,
-        planner: { meals_count: "auto", sleep_quality: "normal", overeating_event: null },
-        ...payload,
-      });
+      await apiPost(
+        "/api/plan/generate",
+        {
+          user_id: userId,
+          planner: { meals_count: "auto", sleep_quality: "normal", overeating_event: null },
+          ...payload,
+        },
+        { timeoutMs: 120_000 },
+      );
+      showToast("План обновлён", "success");
       await loadWindow();
     } finally {
       setGenerateBusy(false);
@@ -265,19 +271,21 @@ export default function PlanTab({ showToast, userId }) {
   };
 
   const handleMenuConfirm = async ({ period, start_from }) => {
+    showToast("Составляем план… обычно 30–90 сек, не закрывайте приложение", "info");
     try {
       await runGenerate({ period, ...(start_from ? { start_from } : {}) });
     } catch (e) {
-      showToast(e.message, "error");
+      toastApiError(showToast, e, { context: "plan_generate" });
     }
   };
 
   const extendPlan = async () => {
+    showToast("Продлеваем план… обычно 30–90 сек, не закрывайте приложение", "info");
     try {
       await runGenerate({ period: "week" });
       setExtendDismissed(true);
     } catch (e) {
-      showToast(e.message, "error");
+      toastApiError(showToast, e, { context: "plan_generate" });
     }
   };
 

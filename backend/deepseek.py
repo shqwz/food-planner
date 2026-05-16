@@ -16,10 +16,19 @@ OPENROUTER_URL = "https://openrouter.ai/api/v1/chat/completions"
 MODEL = "google/gemini-2.0-flash-001"  # бесплатная, 200 запросов/день
 
 
-def call_ai(prompt: str, system_prompt: str = None, temperature: float = 0.7) -> dict:
+def call_ai(
+    prompt: str,
+    system_prompt: str = None,
+    temperature: float = 0.7,
+    *,
+    max_retries: int = 5,
+    timeout: int = 90,
+    max_tokens: int = 8192,
+) -> dict:
     """Отправляет запрос к OpenRouter и возвращает ответ как dict.
 
     Делает несколько попыток при временных ошибках.
+    Для генерации плана задавайте max_retries=2 и timeout≤75 — лимит веб-запроса на PythonAnywhere ~100 с.
     """
     api_key = openrouter_api_key()
     if not api_key:
@@ -51,11 +60,11 @@ def call_ai(prompt: str, system_prompt: str = None, temperature: float = 0.7) ->
             {"role": "user", "content": prompt}
         ],
         "temperature": temperature,
-        "max_tokens": 8192,
+        "max_tokens": max_tokens,
         "response_format": {"type": "json_object"}
     }
 
-    max_retries = 5
+    max_retries = max(1, int(max_retries))
     last_error = None
 
     for attempt in range(max_retries):
@@ -64,7 +73,7 @@ def call_ai(prompt: str, system_prompt: str = None, temperature: float = 0.7) ->
                 OPENROUTER_URL,
                 headers=headers,
                 json=payload,
-                timeout=90
+                timeout=timeout,
             )
 
             # 429 — Too Many Requests
@@ -399,7 +408,13 @@ def generate_weekly_plan(user_data: dict, products: list) -> dict:
   }}
 }}
 """
-    return call_ai(prompt, temperature=0.7)
+    return call_ai(
+        prompt,
+        temperature=0.7,
+        max_retries=2,
+        timeout=75,
+        max_tokens=6144,
+    )
 
 
 def _canonical_product_key(raw: str) -> str:

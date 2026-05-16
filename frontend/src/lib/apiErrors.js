@@ -20,9 +20,15 @@ export function formatApiError(err, opts = {}) {
     if (nm === "AbortError") {
       return "Запрос прерван. Попробуйте ещё раз.";
     }
+    if (opts.context === "plan_generate") {
+      return (
+        "Сервер не успел ответить: генерация плана занимает до 1–2 минут, соединение оборвалось. " +
+        "Не сворачивайте Telegram, попробуйте снова через минуту (лучше Wi‑Fi)."
+      );
+    }
     if (
       nm === "TypeError" ||
-      /failed to fetch|networkerror|load failed|fetch/i.test(raw) ||
+      /failed to fetch|networkerror|load failed|fetch|соединение потеряно|connection lost/i.test(raw) ||
       (!raw && nm)
     ) {
       return "Нет связи с сервером. Проверьте интернет и откройте приложение снова.";

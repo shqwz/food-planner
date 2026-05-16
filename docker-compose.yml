@@ -19,7 +19,25 @@ services:
     volumes:
       - food_planner_data:/data
       - ./backend/ai_trace:/app/backend/ai_trace
+      # Локальная разработка: правки Python и статики без пересборки образа
+      - ./backend:/app/backend
+      - ./frontend/dist:/app/frontend/dist
     restart: unless-stopped
+    # --reload подхватывает изменения в ./backend (только для локального docker)
+    command:
+      [
+        "gunicorn",
+        "--bind",
+        "0.0.0.0:5000",
+        "--workers",
+        "1",
+        "--threads",
+        "4",
+        "--timeout",
+        "120",
+        "--reload",
+        "app:app",
+      ]
 
   frontend:
     build:

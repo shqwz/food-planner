@@ -11,7 +11,7 @@ RUN chmod +x /app/backend/docker-entrypoint.sh
 
 EXPOSE 5000
 
-ENTRYPOINT ["/app/backend/docker-entrypoint.sh"]
+ENTRYPOINT ["sh", "/app/backend/docker-entrypoint.sh"]
 
 # Gunicorn вместо app.run() — без предупреждения Werkzeug dev server.
 # SQLite: один worker, несколько потоков на воркер.

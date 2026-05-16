@@ -40,18 +40,34 @@ export async function apiGet(path, params = {}) {
   return data;
 }
 
-export async function apiPost(path, payload = {}) {
+/**
+ * @param {string} path
+ * @param {object} [payload]
+ * @param {{ timeoutMs?: number }} [options] — для долгих запросов (генерация плана)
+ */
+export async function apiPost(path, payload = {}, options = {}) {
   const url = new URL(path, window.location.origin).href;
-  const response = await fetch(url, {
-    method: "POST",
-    headers: { "Content-Type": "application/json" },
-    body: JSON.stringify(payload),
-  });
-  const data = await parseJsonSafe(response);
-  if (!response.ok) {
-    rejectApi(response, data);
+  const timeoutMs = options.timeoutMs;
+  const controller = timeoutMs != null && timeoutMs > 0 ? new AbortController() : null;
+  let timerId;
+  if (controller) {
+    timerId = setTimeout(() => controller.abort(), timeoutMs);
   }
-  return data;
+  try {
+    const response = await fetch(url, {
+      method: "POST",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify(payload),
+      signal: controller?.signal,
+    });
+    const data = await parseJsonSafe(response);
+    if (!response.ok) {
+      rejectApi(response, data);
+    }
+    return data;
+  } finally {
+    if (timerId != null) clearTimeout(timerId);
+  }
 }
 
 export async function apiPut(path, payload = {}) {

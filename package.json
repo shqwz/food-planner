@@ -1,6 +1,9 @@
 {
   "scripts": {
     "build": "npm run build --prefix frontend",
+    "dev:docker": "docker compose up --build",
+    "dev:docker:detach": "docker compose up --build -d",
+    "dev:web": "npm run build && docker compose up --build -d backend && echo 'Откройте http://localhost:5001'",
     "dev": "npm run dev --prefix frontend",
     "lint": "npm run lint --prefix frontend",
     "preview": "npm run preview --prefix frontend"
