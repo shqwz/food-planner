@@ -1,7 +1,5 @@
 import { useEffect, useRef, useState } from "react";
 import { apiGet, apiPut } from "../api/client";
-import { toastApiError } from "../lib/apiErrors";
-import DrumPicker from "../components/DrumPicker";
 
 // ─────────────────────────────────────────────────────────────────────────────
 // Константы
@@ -23,11 +21,16 @@ const BUDGET_LABEL = {
 
 const WD = ["Пн", "Вт", "Ср", "Чт", "Пт", "Сб", "Вс"];
 
+const CATEGORY_COLORS = [
+  "#4A9EDB","#63C87A","#F5A623","#E05C5C","#9B7FD4","#5BB8C4","#A0A0A0",
+];
+
 const MONTHS = [
   "Январь","Февраль","Март","Апрель","Май","Июнь",
   "Июль","Август","Сентябрь","Октябрь","Ноябрь","Декабрь",
 ];
 
+const ITEM_H = 40; // высота одного элемента барабана в px
 
 /** Активное состояние чипов профиля — только токены темы (--c-*), т.к. --color-* не заданы в CSS */
 const CHIP_ACTIVE = {
@@ -72,6 +75,12 @@ function calcSleepHours(wakeTime, sleepTime) {
   }
 }
 
+function describeArc(cx, cy, r, startAngle, endAngle) {
+  const s = { x: cx + r * Math.cos(startAngle), y: cy + r * Math.sin(startAngle) };
+  const e = { x: cx + r * Math.cos(endAngle),   y: cy + r * Math.sin(endAngle) };
+  return `M ${s.x} ${s.y} A ${r} ${r} 0 ${endAngle - startAngle > Math.PI ? 1 : 0} 1 ${e.x} ${e.y}`;
+}
+
 function pad2(n) { return String(n).padStart(2, "0"); }
 
 /** Сегодня по локальному календарю устройства — для max у type="date" */
@@ -80,7 +89,7 @@ function todayIsoLocal() {
   return `${t.getFullYear()}-${pad2(t.getMonth() + 1)}-${pad2(t.getDate())}`;
 }
 
-/** Возраст в полных годах на сегодня по дате рождения YYYY-MM-DD (для сохранения в API). */
+/** Полных лет на сегодня по дате рождения YYYY-MM-DD */
 function ageFromBirthIso(iso) {
   const s = (iso || "").trim();
   if (!/^\d{4}-\d{2}-\d{2}$/.test(s)) return null;
@@ -92,6 +101,261 @@ function ageFromBirthIso(iso) {
   if (today.getMonth() < m - 1 || (today.getMonth() === m - 1 && today.getDate() < d)) age -= 1;
   return Math.max(0, age);
 }
+
+// ─────────────────────────────────────────────────────────────────────────────
+// Барабанный пикер (drum scroll)
+// ─────────────────────────────────────────────────────────────────────────────
+
+function wrapIndex(i, n) {
+  if (!n) return 0;
+  return ((Math.round(i) % n) + n) % n;
+}
+
+/**
+ * Барабан выбора: один логический круг items.
+ *
+ * При circular список в DOM состоит из ДВУХ одинаковых сегментов подряд (2×n строк).
+ * Скролл «петли» поддерживается сдвигом translate без анимации, когда центр доходит до
+ * краев этой двойной ленты — визуально непрерывно, данных в коде один items.
+ */
+function DrumPicker({ items, value, onChange, width = 72, circular = true }) {
+  const innerRef = useRef(null);
+  const dragRef  = useRef(null);
+  const containerRef = useRef(null);
+
+  // Вешаем нативные touch-слушатели с passive:false чтобы блокировать скролл страницы на iOS
+  useEffect(() => {
+    const el = containerRef.current;
+    if (!el) return;
+    const onTouchStartNative = (e) => { e.preventDefault(); onPointerDown(e); };
+    const onTouchMoveNative  = (e) => { e.preventDefault(); onPointerMove(e); };
+    const onTouchEndNative   = (e) => { onPointerUp(e); };
+    el.addEventListener("touchstart", onTouchStartNative, { passive: false });
+    el.addEventListener("touchmove",  onTouchMoveNative,  { passive: false });
+    el.addEventListener("touchend",   onTouchEndNative,   { passive: false });
+    return () => {
+      el.removeEventListener("touchstart", onTouchStartNative);
+      el.removeEventListener("touchmove",  onTouchMoveNative);
+      el.removeEventListener("touchend",   onTouchEndNative);
+    };
+  // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [items, value]);
+
+  const idx = items.indexOf(value);
+  const selIdx = idx === -1 ? 0 : idx;
+  const n = items.length;
+
+  const totalRows = circular && n > 0 ? n * 2 : n;
+
+  // translateY: центр окна совпадает с inner-строкой virtualRow
+  const yForVirtual = (virtualRow) => (2 - virtualRow) * ITEM_H;
+
+  /** Центральная строка для canonical: нижний круг (первая копия 0…n‑1 сверху, вторая n…2n‑1 под ней). */
+  const stableVirtualRow = (canonicalIdx) => n + canonicalIdx;
+
+  /** Держим центр между n и 2n−1 «строкой»: прыжок на ±n высот одинакового паттерна без анимации. */
+  function recenterCircularTranslate(rawY, el, keepTransitionFalse = true) {
+    if (!circular || n <= 0 || !el) return rawY;
+    let newY = rawY;
+    let vr = Math.round(2 - newY / ITEM_H);
+    while (vr < n) {
+      newY += n * ITEM_H;
+      vr = Math.round(2 - newY / ITEM_H);
+    }
+    while (vr >= 2 * n) {
+      newY -= n * ITEM_H;
+      vr = Math.round(2 - newY / ITEM_H);
+    }
+    if (keepTransitionFalse) el.style.transition = "none";
+    el.style.transform = `translateY(${newY}px)`;
+    return newY;
+  }
+
+  useEffect(() => {
+    const el = innerRef.current;
+    if (!el) return;
+    el.style.transition = "none";
+    if (circular && n > 0) {
+      el.style.transform = `translateY(${yForVirtual(stableVirtualRow(selIdx))}px)`;
+    } else {
+      el.style.transform = `translateY(${yForVirtual(selIdx)}px)`;
+    }
+  }, []); // только при маунте
+
+  function snapToNearest(rawY) {
+    const live = 2 - rawY / ITEM_H;
+    const picked = circular && n > 0 ? wrapIndex(live, n) : Math.max(0, Math.min(n - 1, Math.round(live)));
+    const el = innerRef.current;
+    if (!el) return;
+    el.style.transition = "transform 0.18s ease";
+    const targetY =
+      circular && n > 0 ? yForVirtual(stableVirtualRow(picked)) : yForVirtual(picked);
+    el.style.transform = `translateY(${targetY}px)`;
+    onChange(items[picked]);
+  }
+
+  function currentY() {
+    const el = innerRef.current;
+    const t = el?.style.transform;
+    const m = t?.match(/translateY\(([-\d.]+)px\)/);
+    if (m) return parseFloat(m[1]);
+    if (!el) return 0;
+    return circular && n > 0
+      ? yForVirtual(stableVirtualRow(selIdx))
+      : yForVirtual(selIdx);
+  }
+
+  function onPointerDown(e) {
+    e.preventDefault();
+    const startY = e.touches ? e.touches[0].clientY : e.clientY;
+    const startTranslate = currentY();
+    dragRef.current = { initialClientY: startY, initialTranslateY: startTranslate };
+    const el = innerRef.current;
+    if (el) el.style.transition = "none";
+  }
+
+  function onPointerMove(e) {
+    if (!dragRef.current || !innerRef.current) return;
+    const clientY = e.touches ? e.touches[0].clientY : e.clientY;
+    const dy = clientY - dragRef.current.initialClientY;
+    let newY = dragRef.current.initialTranslateY + dy;
+    const el = innerRef.current;
+    if (circular && n > 0) {
+      newY = recenterCircularTranslate(newY, el);
+    }
+    el.style.transition = "none";
+    el.style.transform = `translateY(${newY}px)`;
+    const live = 2 - newY / ITEM_H;
+    const liveIdx =
+      circular && n > 0
+        ? wrapIndex(live, n)
+        : Math.max(0, Math.min(n - 1, Math.round(live)));
+    onChange(items[liveIdx]);
+  }
+
+  function onPointerUp(e) {
+    if (!dragRef.current) return;
+    snapToNearest(currentY());
+    dragRef.current = null;
+  }
+
+  return (
+    <div
+      ref={containerRef}
+      style={{
+        width, height: ITEM_H * 5, overflow: "hidden", position: "relative",
+        borderRadius: "var(--r-md)",
+        background: "var(--c-surface2)",
+        touchAction: "none", userSelect: "none", cursor: "grab",
+      }}
+      onMouseDown={onPointerDown}
+      onMouseMove={onPointerMove}
+      onMouseUp={onPointerUp}
+      onMouseLeave={onPointerUp}
+    >
+      {/* Контент барабана (при circular — несколько копий списка подряд) */}
+      <div ref={innerRef} style={{ display: "flex", flexDirection: "column" }}>
+        {Array.from({ length: totalRows }, (_, r) => {
+          const canonicalIdx = n > 0 ? ((r % n) + n) % n : 0;
+          const item = items[canonicalIdx];
+          const highlighted = circular ? item === value : r === selIdx && item === value;
+          return (
+            <div
+              key={`r-${r}`}
+              style={{
+                height: ITEM_H,
+                display: "flex", alignItems: "center", justifyContent: "center",
+                fontSize: highlighted ? 20 : 15,
+                fontWeight: highlighted ? 500 : 400,
+                color: highlighted
+                  ? "var(--c-text-primary)"
+                  : "var(--c-text-secondary)",
+                transition: "font-size 0.1s, color 0.1s",
+                flexShrink: 0,
+              }}
+            >
+              {item}
+            </div>
+          );
+        })}
+      </div>
+
+      {/* Затухание сверху */}
+      <div style={{
+        position: "absolute", top: 0, left: 0, right: 0, height: ITEM_H * 2,
+        background: "linear-gradient(to bottom, var(--c-surface2), transparent)",
+        pointerEvents: "none",
+      }} />
+      {/* Затухание снизу */}
+      <div style={{
+        position: "absolute", bottom: 0, left: 0, right: 0, height: ITEM_H * 2,
+        background: "linear-gradient(to top, var(--c-surface2), transparent)",
+        pointerEvents: "none",
+      }} />
+      {/* Линия сверху выделения */}
+      <div style={{
+        position: "absolute", top: ITEM_H * 2, left: 0, right: 0,
+        height: "0.5px", background: "var(--c-border-mid)", pointerEvents: "none",
+      }} />
+      {/* Линия снизу выделения */}
+      <div style={{
+        position: "absolute", bottom: ITEM_H * 2, left: 0, right: 0,
+        height: "0.5px", background: "var(--c-border-mid)", pointerEvents: "none",
+      }} />
+    </div>
+  );
+}
+
+// ─────────────────────────────────────────────────────────────────────────────
+// Донат-диаграмма
+// ─────────────────────────────────────────────────────────────────────────────
+
+function DonutChart({ categories, total }) {
+  const cx = 54, cy = 54, r = 38, sw = 14, gap = 0.04;
+  if (!categories?.length || total === 0) {
+    return (
+      <svg width="108" height="108" viewBox="0 0 108 108" aria-hidden="true">
+        <circle cx={cx} cy={cy} r={r} fill="none"
+          stroke="var(--c-border-mid)" strokeWidth={sw} />
+        <text x={cx} y={cy + 5} textAnchor="middle" fontSize="13"
+          fill="var(--c-text-secondary)" fontFamily="var(--font)">—</text>
+      </svg>
+    );
+  }
+  const segments = [];
+  let cur = -Math.PI / 2;
+  categories.forEach((cat, i) => {
+    const sweep = (cat.amount / total) * 2 * Math.PI - gap;
+    if (sweep <= 0) return;
+    segments.push({
+      path:  describeArc(cx, cy, r, cur, cur + sweep),
+      color: CATEGORY_COLORS[i % CATEGORY_COLORS.length],
+    });
+    cur += (cat.amount / total) * 2 * Math.PI;
+  });
+  return (
+    <svg width="108" height="108" viewBox="0 0 108 108" aria-hidden="true">
+      <circle cx={cx} cy={cy} r={r} fill="none"
+        stroke="var(--c-border-mid)" strokeWidth={sw} />
+      {segments.map((s, i) => (
+        <path key={i} d={s.path} fill="none" stroke={s.color}
+          strokeWidth={sw} strokeLinecap="round" />
+      ))}
+      <text x={cx} y={cy - 5} textAnchor="middle" fontSize="13" fontWeight="500"
+        fill="var(--c-text-primary)" fontFamily="var(--font)">
+        {total.toLocaleString("ru-RU")}
+      </text>
+      <text x={cx} y={cy + 10} textAnchor="middle" fontSize="10"
+        fill="var(--c-text-secondary)" fontFamily="var(--font)">
+        ₽ / нед
+      </text>
+    </svg>
+  );
+}
+
+// ─────────────────────────────────────────────────────────────────────────────
+// Карточка-секция
+// ─────────────────────────────────────────────────────────────────────────────
 
 function Section({ label, children, editMode, onTap, dimmed, style }) {
   return (
@@ -130,7 +394,7 @@ function Section({ label, children, editMode, onTap, dimmed, style }) {
 // Основной компонент
 // ─────────────────────────────────────────────────────────────────────────────
 
-export default function ProfileScreen({ profile, onClose, userId, onProfileUpdated, showToast }) {
+export default function ProfileScreen({ profile, onClose, userId, onProfileUpdated }) {
   const [stats, setStats]           = useState(null);
   const [statsLoading, setLoading]  = useState(true);
   const [editMode, setEditMode]     = useState(false);
@@ -187,6 +451,11 @@ export default function ProfileScreen({ profile, onClose, userId, onProfileUpdat
 
   const trainingDays = (profile.training_days || []).slice().sort((a, b) => a - b);
   const sleepHours   = calcSleepHours(profile.wake_time, profile.sleep_time);
+  const spendCategories = stats?.spend_by_category || [];
+  const spendTotal      = stats?.spend_total || 0;
+  const budgetWeekly    = Math.round(profile.budget_weekly || 0);
+  const budgetLeft      = budgetWeekly > 0 ? budgetWeekly - spendTotal : null;
+
   // ── Wiggle CSS ────────────────────────────────────────────────────────────
 
   const wiggleStyle1 = editMode && !openCard
@@ -304,12 +573,11 @@ export default function ProfileScreen({ profile, onClose, userId, onProfileUpdat
 
       await apiPut("/api/profile", base);
       if (onProfileUpdated) await onProfileUpdated();
-      setOpenCard(null);
     } catch (e) {
       console.error("Ошибка сохранения:", e);
-      if (showToast) toastApiError(showToast, e);
     } finally {
       setSaving(false);
+      setOpenCard(null);
     }
   }
 
@@ -485,7 +753,7 @@ export default function ProfileScreen({ profile, onClose, userId, onProfileUpdat
                 <div>
                   <div style={{ fontWeight: 500, fontSize: 17 }}>{profile.name || "Без имени"}</div>
                   <div style={{ fontSize: 13, color: "var(--c-text-secondary)" }}>
-                    {profile.weight ?? "—"} кг · {profile.height ?? "—"} см
+                    {profile.age ?? "—"} лет · {profile.weight ?? "—"} кг · {profile.height ?? "—"} см
                   </div>
                 </div>
               </div>
@@ -575,6 +843,15 @@ export default function ProfileScreen({ profile, onClose, userId, onProfileUpdat
                       fontFamily: "var(--font)",
                     }}
                   />
+                  <div style={{
+                    fontSize: 12, color: "var(--c-text-secondary)",
+                    marginTop: 8,
+                  }}>
+                    {(() => {
+                      const a = ageFromBirthIso(editBirthDate);
+                      return a != null ? `Полных лет: ${a}` : "Укажи дату";
+                    })()}
+                  </div>
 
                   {/* Пол */}
                   <SubLabel>Пол</SubLabel>
@@ -948,6 +1225,76 @@ export default function ProfileScreen({ profile, onClose, userId, onProfileUpdat
                     Сон: {sleepDiff} ч
                   </div>
                   <SaveBtn id="sleep" />
+                </div>
+              )}
+            </div>
+
+            {/* ══ Питание за неделю ═══════════════════════════════════════ */}
+            <div style={{
+              background: "var(--c-surface)",
+              border: "0.5px solid var(--c-border-mid)",
+              borderRadius: "var(--r-lg)",
+              padding: "14px 16px", marginBottom: 10,
+              opacity: editMode ? 0.35 : 1,
+              transition: "opacity 0.2s",
+              pointerEvents: editMode ? "none" : undefined,
+            }}>
+              <div style={{
+                fontSize: 11, fontWeight: 500, textTransform: "uppercase",
+                letterSpacing: "0.06em", color: "var(--c-text-secondary)", marginBottom: 10,
+              }}>
+                Питание за неделю
+              </div>
+              {statsLoading ? (
+                <div style={{ fontSize: 13, color: "var(--c-text-secondary)" }}>Загрузка…</div>
+              ) : (
+                <div style={{ display: "flex", alignItems: "center", gap: 16 }}>
+                  <DonutChart categories={spendCategories} total={spendTotal} />
+                  <div style={{ flex: 1, display: "flex", flexDirection: "column", gap: 6 }}>
+                    {spendCategories.length === 0 ? (
+                      <div style={{ fontSize: 13, color: "var(--c-text-secondary)" }}>
+                        Расходы появятся после первых покупок
+                      </div>
+                    ) : (
+                      <>
+                        {spendCategories.slice(0, 4).map((cat, i) => (
+                          <div key={cat.key} style={{ display: "flex", alignItems: "center", gap: 7, fontSize: 12 }}>
+                            <span style={{
+                              width: 8, height: 8, borderRadius: "50%", flexShrink: 0,
+                              background: CATEGORY_COLORS[i % CATEGORY_COLORS.length],
+                            }} />
+                            <span style={{ flex: 1 }}>{cat.label}</span>
+                            <span style={{ fontWeight: 500, color: "var(--c-text-secondary)" }}>
+                              {cat.amount.toLocaleString("ru-RU")} ₽
+                            </span>
+                          </div>
+                        ))}
+                        {spendCategories.length > 4 && (
+                          <div style={{ fontSize: 11, color: "var(--c-text-secondary)" }}>
+                            + ещё {spendCategories.length - 4}
+                          </div>
+                        )}
+                      </>
+                    )}
+                    {budgetLeft !== null && (
+                      <div style={{
+                        marginTop: 4, paddingTop: 6,
+                        borderTop: "0.5px solid var(--c-border-mid)",
+                        display: "flex", justifyContent: "space-between",
+                        fontSize: 11, color: "var(--c-text-secondary)",
+                      }}>
+                        <span>Бюджет {budgetWeekly.toLocaleString("ru-RU")} ₽</span>
+                        <span style={{
+                          fontWeight: 500,
+                          color: budgetLeft >= 0 ? "var(--c-accent)" : "var(--c-danger)",
+                        }}>
+                          {budgetLeft >= 0
+                            ? `−${budgetLeft.toLocaleString("ru-RU")} ₽`
+                            : `+${Math.abs(budgetLeft).toLocaleString("ru-RU")} ₽`}
+                        </span>
+                      </div>
+                    )}
+                  </div>
                 </div>
               )}
             </div>

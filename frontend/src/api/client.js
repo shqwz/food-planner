@@ -1,3 +1,5 @@
+import { formatApiError } from "../lib/apiErrors";
+
 async function parseJsonSafe(response) {
   const ct = (response.headers.get("content-type") || "").toLowerCase();
   if (!ct.includes("application/json")) {
@@ -93,4 +95,9 @@ export async function apiDelete(path, params = {}) {
     rejectApi(response, data);
   }
   return data;
+}
+
+/** Совместимость со старыми импортами: сообщение об ошибке при сохранении приёма по плану (склад). */
+export function formatDiarySaveError(err) {
+  return formatApiError(err, { context: "diary_save" });
 }

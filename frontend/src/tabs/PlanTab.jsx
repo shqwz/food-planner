@@ -1,6 +1,5 @@
 import { useCallback, useEffect, useMemo, useState } from "react";
 import { apiGet, apiPost } from "../api/client";
-import { formatApiError, toastApiError } from "../lib/apiErrors";
 import PlanMenuModal from "./PlanMenuModal";
 
 // ─── константы ────────────────────────────────────────────────────────────────
@@ -134,18 +133,14 @@ function resolveModalHeadline(step, mealFocusIndex, plan) {
 
 // ─── компонент ────────────────────────────────────────────────────────────────
 
-export default function PlanTab({
-  showToast,
-  userId,
-  planExtendNoticeDismissed = false,
-  onPlanExtendNoticeDismiss,
-}) {
+export default function PlanTab({ showToast, userId }) {
   // план / навигация
   const [days, setDays]                   = useState([]);
   const [loading, setLoading]             = useState(true);
   const [error, setError]                 = useState("");
   const [activeIdx, setActiveIdx]         = useState(0);
   const [menuOpen, setMenuOpen]           = useState(false);
+  const [extendDismissed, setExtendDismissed] = useState(false);
   const [generateBusy, setGenerateBusy]   = useState(false);
   const [streakDays, setStreakDays]       = useState(0);
 
@@ -185,7 +180,7 @@ export default function PlanTab({
       if (cancelled) return;
       setLoading(true);
       loadWindow()
-        .catch((e) => { if (!cancelled) setError(formatApiError(e)); })
+        .catch((e) => { if (!cancelled) setError(e.message); })
         .finally(() => { if (!cancelled) setLoading(false); });
     });
     return () => { cancelled = true; };
@@ -227,8 +222,7 @@ export default function PlanTab({
   const existingDates = days.filter((d) => d.exists).map((d) => d.plan_date);
   const lastPlan      = existingDates.length ? existingDates.sort().slice(-1)[0] : null;
   const daysLeft      = lastPlan != null ? Math.max(0, daysBetweenInclusive(todayIso, lastPlan)) : null;
-  const showExtend =
-    !planExtendNoticeDismissed && daysLeft != null && daysLeft <= 2 && lastPlan != null;
+  const showExtend    = !extendDismissed && daysLeft != null && daysLeft <= 3 && lastPlan != null;
 
   const eaten    = diary.totals || { kcal: 0, protein: 0, fat: 0, carbs: 0 };
   const dayGoals = useMemo(() => {
@@ -274,16 +268,16 @@ export default function PlanTab({
     try {
       await runGenerate({ period, ...(start_from ? { start_from } : {}) });
     } catch (e) {
-      showToast(formatApiError(e), "error");
+      showToast(e.message, "error");
     }
   };
 
   const extendPlan = async () => {
     try {
       await runGenerate({ period: "week" });
-      onPlanExtendNoticeDismiss?.();
+      setExtendDismissed(true);
     } catch (e) {
-      showToast(formatApiError(e), "error");
+      showToast(e.message, "error");
     }
   };
 
@@ -338,7 +332,7 @@ export default function PlanTab({
       setSelectedMealIdx(0);
       setModalStep(mode === "plan" ? "plan_meal" : "plan_over_slider");
     } catch (e) {
-      showToast(formatApiError(e), "error");
+      showToast(e.message, "error");
       setModalStep("pick"); setEntryMode("");
     } finally { setPlanLoading(false); }
   };
@@ -360,7 +354,7 @@ export default function PlanTab({
       );
       setAnalyzedMeal({ dish_name: res.dish_name || "Приём пищи", ingredients: ingredients.map((i) => ({ name: i.name, amount: Number(i.amount) || 0, unit: i.unit || "г", kcal: Number(i.kcal) || 0, protein: Number(i.protein) || 0, fat: Number(i.fat) || 0, carbs: Number(i.carbs) || 0, cost: Number(i.cost) || 0 })), totals });
       setModalStep("other_preview");
-    } catch (e) { showToast(formatApiError(e), "error"); } finally { setAnalyzeLoading(false); }
+    } catch (e) { showToast(e.message, "error"); } finally { setAnalyzeLoading(false); }
   };
 
   const submitDiaryPost = async (payload) => {
@@ -370,7 +364,7 @@ export default function PlanTab({
       showToast("Приём записан", "success");
       closeModal();
       await refreshDiary();
-    } catch (e) { toastApiError(showToast, e, { context: "diary_save" }); } finally { setSubmitting(false); }
+    } catch (e) { showToast(e.message, "error"); } finally { setSubmitting(false); }
   };
 
   const submitFromPlan = async (opts) => {
@@ -423,16 +417,38 @@ export default function PlanTab({
 
       {/* Предупреждение об окончании плана */}
       {showExtend && (
-        <div className="plan-extend-notice">
-          <div className="plan-extend-notice__title">
-            {daysLeft === 0
-              ? "План заканчивается сегодня"
-              : `План заканчивается через ${daysLeft} ${daysLeft === 1 ? "день" : "дня"}`}
+        <div className="extend-banner">
+          <div className="extend-banner__icon" aria-hidden>
+            <svg width="18" height="18" viewBox="0 0 18 18" fill="none">
+              <path d="M9 2v5M9 11v1M3.5 15.5l11-13" stroke="none"/>
+              <circle cx="9" cy="9" r="7.5" stroke="currentColor" strokeWidth="1.5"/>
+              <path d="M9 5.5V9.5" stroke="currentColor" strokeWidth="1.5" strokeLinecap="round"/>
+              <circle cx="9" cy="12" r="0.8" fill="currentColor"/>
+            </svg>
           </div>
-          <p className="plan-extend-notice__text">Продлить на неделю вперёд?</p>
-          <div className="plan-extend-notice__actions">
-            <button type="button" className="pill-btn pill-btn-primary" onClick={extendPlan} disabled={generateBusy}>Да</button>
-            <button type="button" className="pill-btn pill-btn-ghost" onClick={() => onPlanExtendNoticeDismiss?.()} disabled={generateBusy}>Позже</button>
+          <div className="extend-banner__body">
+            <div className="extend-banner__title">
+              План заканчивается через {daysLeft} {daysLeft === 1 ? "день" : "дня"}
+            </div>
+            <div className="extend-banner__sub">Продлить на неделю вперёд?</div>
+          </div>
+          <div className="extend-banner__actions">
+            <button
+              type="button"
+              className="extend-banner__btn extend-banner__btn--yes"
+              onClick={extendPlan}
+              disabled={generateBusy}
+            >
+              {generateBusy ? "…" : "Да"}
+            </button>
+            <button
+              type="button"
+              className="extend-banner__btn extend-banner__btn--no"
+              onClick={() => setExtendDismissed(true)}
+              disabled={generateBusy}
+            >
+              Позже
+            </button>
           </div>
         </div>
       )}
