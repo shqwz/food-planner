@@ -140,6 +140,13 @@ def generate_plan():
     POST JSON: user_id, planner?, period?: day|from_today|week, start_from?: YYYY-MM-DD
     По умолчанию period=week, anchor завтра (МСК) или start_from.
     """
+    try:
+        return _generate_plan_impl()
+    except Exception as e:
+        return jsonify({"error": f"Ошибка генерации плана: {str(e)}"}), 500
+
+
+def _generate_plan_impl():
     data = request.get_json(force=True, silent=True) or {}
     user_id = data.get("user_id")
     planner_payload = data.get("planner", {})
@@ -160,7 +167,8 @@ def generate_plan():
 
     # Защита от двойной генерации: блокируем повторный запрос в течение 30 секунд
     last_gen = conn.execute(
-        "SELECT MAX(generated_at) as t FROM meal_plans WHERE user_id = ?", (internal_user_id,)
+        "SELECT MAX(updated_at) AS t FROM meal_plan WHERE user_id = ?",
+        (internal_user_id,),
     ).fetchone()
     if last_gen and last_gen["t"]:
         from datetime import datetime as _dt
